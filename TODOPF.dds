@@ -1,0 +1,20 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* TODOPF - Todo Application Physical File
+     A*
+     A* Compile command:
+     A*   CRTPF FILE(TODO/TODOPF) SRCFILE(TODO/QDDSSRC) SRCMBR(TODOPF)
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A                                      UNIQUE
+     A          R TODOR
+     A*
+     A* --- Key Field ---
+     A            TDID           5P 0       TEXT('Todo ID - unique sequential key')
+     A*
+     A* --- Data Fields ---
+     A            TDDESC        50A         TEXT('Todo description')
+     A            TDDONE         1A         TEXT('Done flag: 0=Pending 1=Done')
+     A            TDDUE          L          TEXT('Due date')
+     A                                      DATFMT(*ISO)
+     A*
+     A* --- Key Definition ---
+     A          K TDID

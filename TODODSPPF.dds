@@ -1,0 +1,135 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* TODODSPPF - Todo Application Display File
+     A*
+     A* Record Formats:
+     A*   TODOSFL  - Subfile record (one row per todo item)
+     A*   TODOCTL  - Subfile control (list screen with headings and F-keys)
+     A*   TODODET  - Add / Edit detail screen
+     A*   TODODEL  - Delete confirmation screen
+     A*
+     A* Indicator Map:
+     A*   *IN03  - F3  pressed (Exit)
+     A*   *IN06  - F6  pressed (Add new todo)
+     A*   *IN12  - F12 pressed (Cancel)
+     A*   *IN50  - SFLDSP   : display subfile records (off = hide rows)
+     A*   *IN51  - SFLDSPCTL: display subfile control record
+     A*   *IN52  - SFLCLR   : clear subfile before reload
+     A*   *IN53  - SFLEND   : bottom-of-list indicator (shows "Bottom")
+     A*   *IN60  - ERRMSG   : error / info message overlay on TODODET
+     A*
+     A* Compile command (no prerequisites):
+     A*   CRTDSPF FILE(TODO/TODODSPPF) SRCFILE(TODO/QDDSSRC) SRCMBR(TODODSPPF)
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A*
+     A*--------------------------------------------------------------------------
+     A* TODOSFL - Subfile record format
+     A*--------------------------------------------------------------------------
+     A          R TODOSFL                   SFL
+     A* Option input column (user types 2/4/5)
+     A            SFLOPT         1A  B  8  2
+     A* Display-only fields
+     A            TDID           5P 0O  8  4EDTCDE(Z)
+     A            TDDESC        50A  O  8 11
+     A            TDDUE          L   O  8 63DATFMT(*ISO)
+     A            TDDONE         1A  O  8 75
+     A*
+     A*--------------------------------------------------------------------------
+     A* TODOCTL - Subfile control record format (the list screen)
+     A*--------------------------------------------------------------------------
+     A          R TODOCTL                   SFLCTL(TODOSFL)
+     A                                      SFLSIZ(0099)
+     A                                      SFLPAG(0014)
+     A                                      CA03(03 'F3=Exit')
+     A                                      CA06(06 'F6=Add')
+     A                                      ROLLUP(25 'Page Down')
+     A                                      ROLLDOWN(26 'Page Up')
+     A                                 50   SFLDSP
+     A                                 51   SFLDSPCTL
+     A                                 52   SFLCLR
+     A                                 53   SFLEND(*MORE)
+     A*  Screen title and instructions
+     A                                       1  2'Todo List'
+     A                                          DSPATR(HI)
+     A                                       1 30'IBM i RPG Todo Application'
+     A                                       3  2'F3=Exit   F6=Add New Todo'
+     A                                          COLOR(BLU)
+     A*  Column headings
+     A                                       6  2'Opt'
+     A                                          COLOR(WHT)
+     A                                       6  7'ID'
+     A                                          COLOR(WHT)
+     A                                       6 11'Description'
+     A                                          COLOR(WHT)
+     A                                       6 63'Due Date'
+     A                                          COLOR(WHT)
+     A                                       6 75'Done'
+     A                                          COLOR(WHT)
+     A                                       7  2'---'
+     A                                          COLOR(WHT)
+     A                                       7  7'-----'
+     A                                          COLOR(WHT)
+     A                                       7 11'--------------------------------------------------'
+     A                                          COLOR(WHT)
+     A                                       7 63'----------'
+     A                                          COLOR(WHT)
+     A                                       7 75'----'
+     A                                          COLOR(WHT)
+     A*  Valid options reminder at bottom
+     A                                      23  2'Valid options: 2=Edit  +
+     A                                          4=Delete  5=Mark Done'
+     A                                          COLOR(BLU)
+     A*
+     A*--------------------------------------------------------------------------
+     A* TODODET - Add / Edit detail screen
+     A*--------------------------------------------------------------------------
+     A          R TODODET
+     A                                      CA03(03 'F3=Cancel')
+     A                                      CA12(12 'F12=Cancel')
+     A*  Screen title
+     A            DETMODE       10A  O  1  2
+     A                                       1 30'IBM i RPG Todo Application'
+     A                                       3  2'Enter todo details then press+
+     A                                           Enter. F3/F12=Cancel'
+     A                                          COLOR(BLU)
+     A*  ID display (only visible during edit - controlled by RPG blanking field)
+     A                                       5  2'Todo ID :'
+     A            DETID          5P 0O  5 12EDTCDE(Z)
+     A*  Description input
+     A                                       7  2'Description:'
+     A            DETDESC       50A  B  7 15CHECK(LC)
+     A                                          COLOR(GRN)
+     A*  Due date input
+     A                                       9  2'Due Date   :'
+     A            DETDUE         L   B  9 15DATFMT(*ISO)
+     A                                          COLOR(GRN)
+     A                                       9 30'(YYYY-MM-DD)'
+     A                                          COLOR(BLU)
+     A*  Error / validation message
+     A                                 60   11  2'Description cannot be blank.  +
+     A                                          Press Enter to continue.'
+     A                                          COLOR(RED)
+     A*
+     A*--------------------------------------------------------------------------
+     A* TODODEL - Delete confirmation screen
+     A*--------------------------------------------------------------------------
+     A          R TODODEL
+     A                                      CA12(12 'F12=Cancel')
+     A*  Screen title
+     A                                       1  2'Confirm Delete'
+     A                                          DSPATR(HI)
+     A                                       1 30'IBM i RPG Todo Application'
+     A*  Record details
+     A                                       5  2'Delete this todo?'
+     A                                          COLOR(RED)
+     A                                       7  2'ID          :'
+     A            DELID          5P 0O  7 16EDTCDE(Z)
+     A                                       9  2'Description:'
+     A            DELDESC       50A  O  9 16
+     A                                          COLOR(WHT)
+     A                                      11  2'Due Date   :'
+     A            DELDUE         L   O 11 16DATFMT(*ISO)
+     A                                          COLOR(WHT)
+     A*  Confirmation instructions
+     A                                      23  2'Press ENTER to delete.   +
+     A                                          F12=Cancel'
+     A                                          COLOR(RED)

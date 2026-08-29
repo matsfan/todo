@@ -1,0 +1,15 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* TODOLF - Todo Application Logical File
+     A*
+     A* Keyed logical view over TODOPF, ordered by TDID ascending.
+     A* Used by TODOMAIN to read records in ID order when loading the subfile.
+     A*
+     A* Compile command (must compile TODOPF first):
+     A*   CRTLF FILE(TODO/TODOLF) SRCFILE(TODO/QDDSSRC) SRCMBR(TODOLF)
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R TODOR                     PFILE(TODO/TODOPF)
+     A*
+     A* All fields inherited from TODOPF - no need to redefine them.
+     A*
+     A* --- Key Definition (ascending by ID) ---
+     A          K TDID
