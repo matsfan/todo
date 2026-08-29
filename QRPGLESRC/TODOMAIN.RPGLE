@@ -1,15 +1,15 @@
 **FREE
 //***************************************************************************
-// TODOMAIN - Todo Application Main Program
+// TODOMAIN - Todo Application Main Program  (thin UI shell)
 //
 // 5250 green-screen todo manager for IBM i
 //
 // Screens  : TODODSPPF (QDDSSRC)
-// Data     : TODOPF    physical file  (QDDSSRC)
-//            TODOLF    logical file   (QDDSSRC) - keyed by TDID ascending
+// Data     : delegated entirely to TODOBL service program
 //
-// Compile command (compile all DDS files first):
+// Compile command (compile all DDS objects and TODOBL first):
 //   CRTBNDRPG PGM(TODO/TODOMAIN) SRCFILE(TODO/QRPGLESRC) SRCMBR(TODOMAIN)
+//             BNDDIR(TODO/TODOBND)
 //
 // Screen Flow:
 //   TODOCTL (list) --F6---> TODODET (add)  --> TODOCTL
@@ -33,15 +33,10 @@
 // File Declarations
 // ---------------------------------------------------------------------------
 
-// Logical file - used for sequential reads (subfile load) and keyed access
-DCL-F TODOLF    DISK    KEYED USROPN;
-
-// Physical file - used for WRITE / UPDATE / DELETE
-DCL-F TODOPF    DISK    KEYED USAGE(*UPDATE:*OUTPUT:*DELETE) USROPN;
-
 // Display file - SFILE ties subfile record format to RRN counter
 DCL-F TODODSPPF WORKSTN SFILE(TODOSFL:w_Rrn)
-                        INFDS(w_Dspf_Infds);
+                        INFDS(w_Dspf_Infds)
+                        USROPN;
 
 // ---------------------------------------------------------------------------
 // Variables
@@ -57,8 +52,69 @@ DCL-S w_NextId   PACKED(5:0) INZ(0);         // Next available todo ID
 DCL-S w_Mode     CHAR(3)     INZ('');         // 'ADD' or 'EDT'
 DCL-S w_Option   CHAR(1)     INZ('');         // User option from subfile row
 DCL-S w_SelId    PACKED(5:0) INZ(0);         // ID of selected todo
-DCL-S w_Found    IND         INZ(*OFF);       // Chain / READE found indicator
 DCL-S w_Today    DATE        INZ(*SYS);       // Today's date for new todos
+
+// ---------------------------------------------------------------------------
+// Prototypes for TODOBL exported procedures
+// ---------------------------------------------------------------------------
+
+DCL-DS todoRec_t        QUALIFIED TEMPLATE;
+  tdId    PACKED(5:0);
+  tdDesc  CHAR(50);
+  tdDone  CHAR(1);
+  tdDue   DATE(*ISO);
+END-DS;
+
+DCL-PR OpenFiles           EXTPROC('OPENFILES');
+END-PR;
+
+DCL-PR CloseFiles          EXTPROC('CLOSEFILES');
+END-PR;
+
+DCL-PR GetNextId           PACKED(5:0)
+                           EXTPROC('GETNEXTID');
+END-PR;
+
+DCL-PR ValidateDescription IND
+                           EXTPROC('VALIDATEDESCRIPTION');
+  i_Desc    CHAR(50) CONST;
+END-PR;
+
+DCL-PR AddTodoRecord       EXTPROC('ADDTODORECORD');
+  i_Id      PACKED(5:0) CONST;
+  i_Desc    CHAR(50)    CONST;
+  i_Due     DATE(*ISO)  CONST;
+END-PR;
+
+DCL-PR EditTodoRecord      EXTPROC('EDITTODORECORD');
+  i_Id      PACKED(5:0) CONST;
+  i_Desc    CHAR(50)    CONST;
+  i_Due     DATE(*ISO)  CONST;
+END-PR;
+
+DCL-PR MarkDoneRecord      EXTPROC('MARKDONERECORD');
+  i_Id      PACKED(5:0) CONST;
+END-PR;
+
+DCL-PR DeleteTodoRecord    EXTPROC('DELETETODORECORD');
+  i_Id      PACKED(5:0) CONST;
+END-PR;
+
+DCL-PR ReadFirstTodo       IND
+                           EXTPROC('READFIRSTTODO');
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
+
+DCL-PR ReadNextTodo        IND
+                           EXTPROC('READNEXTTODO');
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
+
+DCL-PR GetTodoById         IND
+                           EXTPROC('GETTODOBYID');
+  i_Id      PACKED(5:0) CONST;
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
 
 // ---------------------------------------------------------------------------
 // Main Procedure
@@ -66,8 +122,8 @@ DCL-S w_Today    DATE        INZ(*SYS);       // Today's date for new todos
 
 DCL-PROC Main;
 
-  OPEN TODOLF;
-  OPEN TODOPF;
+  OPEN TODODSPPF;
+  OpenFiles();
 
   DOU *IN03;                                  // Loop until F3=Exit
 
@@ -116,8 +172,8 @@ DCL-PROC Main;
   END-DO;
 
   // Clean up
-  CLOSE TODOLF;
-  CLOSE TODOPF;
+  CloseFiles();
+  CLOSE TODODSPPF;
   *INLR = *ON;
   RETURN;
 
@@ -129,6 +185,8 @@ END-PROC;
 
 DCL-PROC LoadSubfile;
 
+  DCL-DS l_Rec LIKEDS(todoRec_t);
+
   // Step 1: Clear the subfile
   *IN50 = *OFF;                               // SFLDSP   off = hide rows
   *IN51 = *OFF;                               // SFLDSPCTL off
@@ -139,27 +197,22 @@ DCL-PROC LoadSubfile;
   w_Rrn    = 0;
   w_MaxRrn = 0;
 
-  // Step 2: Read all records from the logical file, skip completed todos
-  SETLL *START TODOLF;
+  // Step 2: Read all non-done records via TODOBL
+  IF ReadFirstTodo(l_Rec);
+    DOW *ON;
+      w_Rrn  += 1;
+      SFLOPT  = ' ';
+      TDID    = l_Rec.tdId;
+      TDDESC  = l_Rec.tdDesc;
+      TDDONE  = l_Rec.tdDone;
+      TDDUE   = l_Rec.tdDue;
+      WRITE TODOSFL;
 
-  DOU %EOF(TODOLF);
-    READ TODOLF TODOR;
-    IF %EOF(TODOLF);
-      LEAVE;
-    END-IF;
-
-    // Skip todos that are already done
-    IF TDDONE = '1';
-      ITER;
-    END-IF;
-
-    // Write one subfile row
-    w_Rrn  += 1;
-    SFLOPT  = ' ';
-    // Fields TDID, TDDESC, TDDONE, TDDUE are already populated by the READ
-    WRITE TODOSFL;
-
-  END-DO;
+      IF NOT ReadNextTodo(l_Rec);
+        LEAVE;
+      END-IF;
+    END-DO;
+  END-IF;
 
   w_MaxRrn = w_Rrn;
 
@@ -169,28 +222,6 @@ DCL-PROC LoadSubfile;
   END-IF;
   *IN51 = *ON;                                // SFLDSPCTL on
   *IN53 = *ON;                                // SFLEND - show "More..." / "Bottom"
-
-END-PROC;
-
-// ---------------------------------------------------------------------------
-// GetNextId - Return the next available todo ID
-// ---------------------------------------------------------------------------
-
-DCL-PROC GetNextId;
-
-  DCL-PI *N PACKED(5:0) END-PI;
-
-  DCL-S l_Id PACKED(5:0) INZ(0);
-
-  SETLL *END TODOLF;
-  READPE TODOR TODOLF;                        // Read last record
-  IF NOT %EOF(TODOLF);
-    l_Id = TDID + 1;
-  ELSE;
-    l_Id = 1;                                 // First ever record
-  END-IF;
-
-  RETURN l_Id;
 
 END-PROC;
 
@@ -215,18 +246,14 @@ DCL-PROC AddTodo;
     END-IF;
 
     // Validate description
-    IF %TRIMR(DETDESC) = *BLANKS;
+    IF NOT ValidateDescription(DETDESC);
       *IN60 = *ON;                            // Show error message
       ITER;
     END-IF;
 
     // Write new record
     w_NextId = GetNextId();
-    TDID     = w_NextId;
-    TDDESC   = DETDESC;
-    TDDONE   = '0';
-    TDDUE    = DETDUE;
-    WRITE TODOR TODOPF;
+    AddTodoRecord(w_NextId: DETDESC: DETDUE);
 
     LEAVE;
 
@@ -240,17 +267,16 @@ END-PROC;
 
 DCL-PROC EditTodo;
 
-  CHAIN w_SelId TODOPF TODOR;
-  w_Found = NOT %EOF(TODOPF);
+  DCL-DS l_Rec LIKEDS(todoRec_t);
 
-  IF NOT w_Found;
+  IF NOT GetTodoById(w_SelId: l_Rec);
     RETURN;
   END-IF;
 
   DETMODE  = 'Edit    ';
-  DETID    = TDID;
-  DETDESC  = TDDESC;
-  DETDUE   = TDDUE;
+  DETID    = l_Rec.tdId;
+  DETDESC  = l_Rec.tdDesc;
+  DETDUE   = l_Rec.tdDue;
   *IN60    = *OFF;
 
   DOU NOT *IN03 AND NOT *IN12;
@@ -262,15 +288,13 @@ DCL-PROC EditTodo;
     END-IF;
 
     // Validate description
-    IF %TRIMR(DETDESC) = *BLANKS;
+    IF NOT ValidateDescription(DETDESC);
       *IN60 = *ON;
       ITER;
     END-IF;
 
-    // Apply changes back to the record buffer and update
-    TDDESC = DETDESC;
-    TDDUE  = DETDUE;
-    UPDATE TODOR TODOPF;
+    // Apply changes
+    EditTodoRecord(w_SelId: DETDESC: DETDUE);
 
     LEAVE;
 
@@ -284,11 +308,7 @@ END-PROC;
 
 DCL-PROC MarkDone;
 
-  CHAIN w_SelId TODOPF TODOR;
-  IF NOT %EOF(TODOPF);
-    TDDONE = '1';
-    UPDATE TODOR TODOPF;
-  END-IF;
+  MarkDoneRecord(w_SelId);
 
 END-PROC;
 
@@ -298,24 +318,20 @@ END-PROC;
 
 DCL-PROC DeleteTodo;
 
-  CHAIN w_SelId TODOPF TODOR;
-  w_Found = NOT %EOF(TODOPF);
+  DCL-DS l_Rec LIKEDS(todoRec_t);
 
-  IF NOT w_Found;
+  IF NOT GetTodoById(w_SelId: l_Rec);
     RETURN;
   END-IF;
 
-  DELID   = TDID;
-  DELDESC = TDDESC;
-  DELDUE  = TDDUE;
+  DELID   = l_Rec.tdId;
+  DELDESC = l_Rec.tdDesc;
+  DELDUE  = l_Rec.tdDue;
 
   EXFMT TODODEL;
 
   IF NOT *IN12;                               // Enter = confirmed, not F12
-    CHAIN w_SelId TODOPF TODOR;               // Re-position for DELETE
-    IF NOT %EOF(TODOPF);
-      DELETE TODOR TODOPF;
-    END-IF;
+    DeleteTodoRecord(w_SelId);
   END-IF;
 
 END-PROC;
