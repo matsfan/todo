@@ -71,11 +71,11 @@ CRTSRCPF FILE(TODO/QRPGLESRC) RCDLEN(112) TEXT('RPG Source')
 2. Add a connection to `pub400.com` with your credentials.
 3. In the **Member Browser**, navigate to `TODO/QDDSSRC`.
 4. Upload members (right-click → "Upload member"):
-   - `TODOPF.dds`     → member `TODOPF`,    type `PF`
-   - `TODOLF.dds`     → member `TODOLF`,    type `LF`
-   - `TODODSPPF.dds`  → member `TODODSPPF`, type `DSPF`
+   - `QDDSSRC/TODOPF.PF`       → member `TODOPF`,    type `PF`
+   - `QDDSSRC/TODOLF.LF`       → member `TODOLF`,    type `LF`
+   - `QDDSSRC/TODODSPPF.DSPF`  → member `TODODSPPF`, type `DSPF`
 5. Navigate to `TODO/QRPGLESRC` and upload:
-   - `TODOMAIN.rpgle` → member `TODOMAIN`,  type `RPGLE`
+   - `QRPGLESRC/TODOMAIN.RPGLE` → member `TODOMAIN`,  type `RPGLE`
 
 ### Option B — SEU (System Editor, green-screen only)
 
@@ -90,12 +90,15 @@ Type or paste the DDS source, then press F3 to save. Repeat for each member.
 If you upload the raw `.dds` / `.rpgle` files to the IFS (e.g. via FTP or VS Code), copy them into source members:
 
 ```
-CPYFRMSTMF FROMSTMF('/home/YOURUSERNAME/TODOPF.dds') +
+CPYFRMSTMF FROMSTMF('/home/YOURUSERNAME/QDDSSRC/TODOPF.PF') +
            TOMBR('/QSYS.LIB/TODO.LIB/QDDSSRC.FILE/TODOPF.MBR') +
            MBROPT(*REPLACE) STMFCCSID(437) DBFCCSID(*FILE)
 ```
 
-Repeat for each file, adjusting `FROMSTMF` and `TOMBR` paths accordingly.
+Repeat for each file, adjusting `FROMSTMF` and `TOMBR` paths accordingly:
+- `QDDSSRC/TODOLF.LF`      → `TODOLF.MBR`
+- `QDDSSRC/TODODSPPF.DSPF` → `TODODSPPF.MBR`
+- `QRPGLESRC/TODOMAIN.RPGLE` → `QRPGLESRC.FILE/TODOMAIN.MBR`
 
 ---
 
