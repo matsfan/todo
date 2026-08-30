@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "pub400User",
+      "type": "promptString",
+      "description": "pub400.com username"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "IBM i: Deploy Source",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/ibmi-deploy.sh",
+      "args": ["${input:pub400User}"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "IBM i: Compile All",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/ibmi-compile.sh",
+      "args": ["${input:pub400User}"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "IBM i: Deploy + Compile",
+      "dependsOrder": "sequence",
+      "dependsOn": ["IBM i: Deploy Source", "IBM i: Compile All"],
+      "problemMatcher": []
+    },
+    {
+      "label": "IBM i: Run Tests",
+      "type": "shell",
+      "command": "ssh",
+      "args": [
+        "${input:pub400User}@pub400.com",
+        "system \"RUCALLTST TSTPGM(TODO/TODOTEST)\""
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    }
+  ]
+}

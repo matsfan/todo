@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Requires the "IBM i Debug" extension (Seiden Group / halcyontechltd.vscode-ibmi-debug),
+      // connected to the same pub400.com connection used by Code for IBM i.
+      // Field names here match commonly documented v1.x usage — if VS Code flags
+      // this config, open Run and Debug -> "Add Configuration..." -> IBM i, and
+      // reconcile against the scaffold it inserts for your installed version.
+      "type": "IBMiDebug",
+      "request": "launch",
+      "name": "Deploy, Compile, Debug TODOMAIN",
+      "program": "TODO/TODOMAIN",
+      "startBatchJobCommand": "SBMJOB CMD(CALL PGM(TODO/TODOMAIN)) JOB(TODOMAIN) INLLIBL(TODO)",
+      "preLaunchTask": "IBM i: Deploy + Compile"
+    },
+    {
+      "type": "IBMiDebug",
+      "request": "launch",
+      "name": "Compile only, then Debug TODOMAIN",
+      "program": "TODO/TODOMAIN",
+      "startBatchJobCommand": "SBMJOB CMD(CALL PGM(TODO/TODOMAIN)) JOB(TODOMAIN) INLLIBL(TODO)",
+      "preLaunchTask": "IBM i: Compile All"
+    },
+    {
+      "type": "IBMiDebug",
+      "request": "attach",
+      "name": "Attach to interactive TODOMAIN job",
+      "job": "REPLACE/WITH/JOBID"
+    }
+  ]
+}
