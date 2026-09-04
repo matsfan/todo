@@ -2,14 +2,26 @@
 set -e
 
 if [ -z "$1" ]; then
-  echo "Usage: $0 <pub400-username>" >&2
+  echo "Usage: $0 <pub400-username> [ssh-identity-file]" >&2
   exit 1
 fi
 
 USER="$1"
-IFS_ROOT="/home/$USER/todo"
+IDENTITY="${2:-}"
+IFS_ROOT="/home/$USER/source/todo"
+PORT="${IBMI_SSH_PORT:-2222}"
 
-ssh "${USER}@pub400.com" <<ENDSSH
+SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+if [ -n "$IDENTITY" ]; then
+  SSH_OPTS+=(-i "$IDENTITY")
+fi
+
+# NOTE: chk_del below combines the "does it exist" check and the delete into one
+# &&/|| chain with a trailing `|| true` — see docs/plans/cicd-pipeline-plan.md
+# Sub-Task 2, item 5. That also silently swallows a *failed* delete, not just a
+# missing object. Flagged for RPG-teammate review before this runs unattended in
+# CI; left unchanged here since it's a CL-semantics call, not a CI-plumbing one.
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" <<ENDSSH
 set -e
 
 # Helper: delete an object only if it exists

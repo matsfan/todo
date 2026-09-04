@@ -114,8 +114,8 @@ GitHub Actions.
    key already in `authorized_keys`.
 3. ~~Verify `ssh -i ci-key -p 2222 mbprice@pub400.com` logs in with no password/passphrase
    prompt~~ — **confirmed working**, no password required.
-4. Add `IBMI_SSH_KEY` (the CI key's private key contents) and `IBMI_USER` as GitHub repo
-   secrets. **Only remaining item in this sub-task.**
+4. ~~Add `IBMI_SSH_KEY` (the CI key's private key contents) and `IBMI_USER` as GitHub repo
+   secrets~~ — **done**.
 
 > **Progress note**: a personal SSH key was generated and verified first (confirming key-based
 > auth works on this system at all), then a separate, dedicated, passphrase-free CI key was
@@ -128,7 +128,7 @@ GitHub Actions.
   [scripts/ibmi-compile.sh](../../scripts/ibmi-compile.sh).
 - Research item 2 above covers the exact IBM i-side key setup.
 
-**Status:** [~] in progress — 3 of 4 todo items done; only adding the GitHub secrets remains
+**Status:** [x] done
 
 ---
 
@@ -161,24 +161,46 @@ auth regardless of this change.
 **Todo List**
 1. ~~Manually verify `git clone https://github.com/matsfan/todo.git` works over SSH on
    pub400~~ — **done, confirmed working.**
-2. Rewrite `ibmi-deploy.sh` to SSH in and run `git fetch`/`checkout <ref>` against the IFS clone
-   instead of `scp -r`; keep the one-time-clone bootstrap as a documented manual step (or a
-   `git clone || git fetch` fallback the script detects).
-3. Add identity-file support to both scripts (e.g. `ssh -i "${IBMI_SSH_KEY_PATH}" ...`).
-4. Decide and implement a host-key verification approach for first connection from a fresh CI
-   runner.
-5. **Flag for RPG-teammate/DevOps pairing review**: `ibmi-compile.sh`'s `chk_del` helper
-   (lines 16–18) combines the existence check and delete in one `&&`/`||` chain with a trailing
-   `|| true` — today that also silently swallows a *failed delete* (for any reason other than
-   "object doesn't exist"), not just a missing object. Worth tightening before this runs
-   unattended in CI, since a silently-failed `DLTF`/`DLTPGM` would make the next `CRT*` step
-   fail with a confusing "object already exists" error instead.
-6. Re-run both scripts manually against pub400.com to confirm no regression.
+2. ~~Rewrite `ibmi-deploy.sh` to SSH in and run `git fetch`/`checkout <ref>` against the IFS
+   clone instead of `scp -r`~~ — **drafted**. The script auto-detects whether `$IFS_ROOT/.git`
+   already exists and clones vs. fetches accordingly, so no separate manual bootstrap step is
+   needed — first run clones, every run after that just updates.
+3. ~~Add identity-file support to both scripts~~ — **drafted**. Both scripts now take an
+   optional identity-file argument (`ibmi-deploy.sh`'s 3rd arg, `ibmi-compile.sh`'s 2nd) and
+   default to `ssh-agent`/default keys when omitted, so the existing VS Code tasks keep working
+   unchanged.
+4. ~~Decide and implement a host-key verification approach~~ — **drafted**: both scripts now use
+   `StrictHostKeyChecking=accept-new` plus `BatchMode=yes` (so a real auth failure errors out
+   immediately instead of hanging on a prompt). Note this is TOFU-per-run on an ephemeral GitHub
+   runner, not true pinning — pinning pub400's host key as a repo variable and writing it to
+   `known_hosts` explicitly before connecting would be the more rigorous version if this ever
+   needs hardening.
+5. **Flag for RPG-teammate/DevOps pairing review — still open, intentionally untouched**:
+   `ibmi-compile.sh`'s `chk_del` helper combines the existence check and delete in one `&&`/`||`
+   chain with a trailing `|| true` — today that also silently swallows a *failed delete* (for
+   any reason other than "object doesn't exist"), not just a missing object. Worth tightening
+   before this runs unattended in CI, since a silently-failed `DLTF`/`DLTPGM` would make the
+   next `CRT*` step fail with a confusing "object already exists" error instead.
+6. ~~Re-run `ibmi-deploy.sh` manually against pub400 to confirm the new git-based deploy and
+   added SSH options work end-to-end~~ — **done, confirmed working.** `ibmi-compile.sh` still
+   needs its own live test run — it wasn't exercised by this test since it's a separate script.
+   (Also found along the way: pub400's SSH port is 2222, not the default 22 — both scripts now
+   default to that via `IBMI_SSH_PORT`, overridable via env var.)
+7. ~~Deploy target path~~ — **changed**: `IFS_ROOT` in both scripts moved from
+   `/home/$USER/todo` to `/home/$USER/source/todo` per request, to fit under a general `source`
+   directory on pub400 rather than a `todo`-specific top-level one.
+8. ~~Confirm `git`'s path on pub400~~ — **confirmed**: `/QOpenSys/pkgs/bin/git`. Since
+   `ibmi-deploy.sh` runs its remote commands via a non-interactive `ssh host <<heredoc>` session
+   (which doesn't reliably source `.profile`/`.bashrc`), the script now explicitly does
+   `export PATH="/QOpenSys/pkgs/bin:$PATH"` at the top of the remote block rather than assuming
+   `git` resolves on its own.
 
 **Relevant Context**
-- [scripts/ibmi-deploy.sh](../../scripts/ibmi-deploy.sh) — current `scp`-based version, being
-  replaced.
-- [scripts/ibmi-compile.sh:16-18](../../scripts/ibmi-compile.sh) — the `chk_del` function.
+- [scripts/ibmi-deploy.sh](../../scripts/ibmi-deploy.sh) — now git-based; confirmed working
+  end-to-end against pub400.
+- [scripts/ibmi-compile.sh:16-18](../../scripts/ibmi-compile.sh) — the `chk_del` function,
+  intentionally left as-is pending item 5's review; SSH-option changes to this script itself
+  still need their own live test run.
 - This script already deletes and recompiles every object on every run (documented in
   [deploy-scripts-plan.md](../../deploy-scripts-plan.md)) — fine for 3 objects today; revisit if
   Sub-Task 7 (Bob) is adopted later.
