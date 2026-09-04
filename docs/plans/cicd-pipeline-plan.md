@@ -107,19 +107,20 @@ GitHub Actions.
   (`IBMI_SSH_KEY`, `IBMI_USER`).
 
 **Todo List**
-1. Generate a dedicated keypair (`ssh-keygen -t ed25519 -f ci-key -C "todo-ci"`, no passphrase
-   since it must run unattended). **Do not reuse the personal key from the note below** — keep
-   personal interactive access and the CI credential on separate keys, so rotating/revoking one
-   never affects the other.
-2. Install the public key on the pub400 profile (via an existing authenticated session —
-   append to `~/.ssh/authorized_keys` on the IFS home directory).
-3. Verify manual key-only login works before touching CI.
-4. Add `IBMI_SSH_KEY` (private key contents) and `IBMI_USER` as GitHub repo secrets.
+1. ~~Generate a dedicated keypair (`ssh-keygen -t ed25519 -f ci-key -C "todo-ci"`, no
+   passphrase since it must run unattended)~~ — **done**, kept separate from the personal key
+   per the decision above.
+2. ~~Install the public key on the pub400 profile~~ — **done**, appended alongside the personal
+   key already in `authorized_keys`.
+3. ~~Verify `ssh -i ci-key -p 2222 mbprice@pub400.com` logs in with no password/passphrase
+   prompt~~ — **confirmed working**, no password required.
+4. Add `IBMI_SSH_KEY` (the CI key's private key contents) and `IBMI_USER` as GitHub repo
+   secrets. **Only remaining item in this sub-task.**
 
-> **Progress note**: a personal SSH key has already been generated and used to connect to
-> pub400 from a laptop successfully — confirms key-based auth works on this system at all. That
-> key stays scoped to personal/interactive use per the decision above; the dedicated CI keypair
-> (items 1–4) is still not started.
+> **Progress note**: a personal SSH key was generated and verified first (confirming key-based
+> auth works on this system at all), then a separate, dedicated, passphrase-free CI key was
+> generated, installed in `authorized_keys` alongside the personal key, and verified to log in
+> with zero prompts. Only remaining step in this sub-task is adding it to GitHub as a secret.
 
 **Relevant Context**
 - Current scripts already parameterize the username as `$1` — see
@@ -127,7 +128,7 @@ GitHub Actions.
   [scripts/ibmi-compile.sh](../../scripts/ibmi-compile.sh).
 - Research item 2 above covers the exact IBM i-side key setup.
 
-**Status:** [ ] not started
+**Status:** [~] in progress — 3 of 4 todo items done; only adding the GitHub secrets remains
 
 ---
 
