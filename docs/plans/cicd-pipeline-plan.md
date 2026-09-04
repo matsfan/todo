@@ -108,11 +108,18 @@ GitHub Actions.
 
 **Todo List**
 1. Generate a dedicated keypair (`ssh-keygen -t ed25519 -f ci-key -C "todo-ci"`, no passphrase
-   since it must run unattended).
+   since it must run unattended). **Do not reuse the personal key from the note below** — keep
+   personal interactive access and the CI credential on separate keys, so rotating/revoking one
+   never affects the other.
 2. Install the public key on the pub400 profile (via an existing authenticated session —
    append to `~/.ssh/authorized_keys` on the IFS home directory).
 3. Verify manual key-only login works before touching CI.
 4. Add `IBMI_SSH_KEY` (private key contents) and `IBMI_USER` as GitHub repo secrets.
+
+> **Progress note**: a personal SSH key has already been generated and used to connect to
+> pub400 from a laptop successfully — confirms key-based auth works on this system at all. That
+> key stays scoped to personal/interactive use per the decision above; the dedicated CI keypair
+> (items 1–4) is still not started.
 
 **Relevant Context**
 - Current scripts already parameterize the username as `$1` — see
