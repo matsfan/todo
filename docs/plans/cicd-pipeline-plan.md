@@ -15,6 +15,11 @@ tooling — no Eradani, ARCAD, or similar commercial IBM i DevOps suite.
 - `scripts/ibmi-deploy.sh` (scp source to the IFS) and `scripts/ibmi-compile.sh` (SSH + ordered
   `CRT*` commands) already exist and work, wired into `.vscode/tasks.json`.
 - `docs/DEPLOY.md` documents the manual first-time setup on pub400.com.
+- **Confirmed: git is installed on pub400.com at `/QOpenSys/pkgs/bin/git`** (PASE Open Source
+  package), **and a manual `git clone` of `github.com/matsfan/todo` from pub400 has succeeded.**
+  This closes out the last open question for the deploy redesign in Sub-Task 2: pub400 has both
+  git and outbound internet access, and the repo is publicly reachable, so pub400 can clone/pull
+  it directly with no stored GitHub credentials.
 
 **What's missing** — and what this plan builds:
 1. Non-interactive auth (today's scripts prompt for a username each run and rely on
@@ -25,6 +30,8 @@ tooling — no Eradani, ARCAD, or similar commercial IBM i DevOps suite.
    terminal panel — nothing fails the build).
 4. A safe convention for running compiles/tests against a **shared, public, free** system
    (pub400.com) without one developer's push clobbering another's.
+5. A deploy step that tracks git commits directly (via `git pull`/`checkout` on pub400) instead
+   of blindly `scp`-ing whatever is on the local disk — see Sub-Task 2.
 
 **Team context**: I (the author of this plan) have CI/CD and DevOps experience but no RPG or
 IBM i background. I'm leaning on RPG-experienced teammates to review any generated CL command
@@ -50,9 +57,12 @@ sub-task should be implemented.
    messages vs. a spooled report) and whether it supports an output option (`OUTPUT`/`DTAOUT`
    parameters, or RPGUnit's XML report mode) that a script can parse for a real exit code,
    instead of a human reading the panel.
-4. **GitHub-hosted runner reachability** — confirm a standard GitHub-hosted Ubuntu runner can
-   reach pub400.com over SSH (port 23/22 as applicable) from GitHub's IP ranges; if pub400
-   firewalls that, a self-hosted runner would be needed instead.
+4. **Network reachability, both directions**:
+   - Confirm a standard GitHub-hosted Ubuntu runner can reach pub400.com over SSH (port 23/22
+     as applicable) from GitHub's IP ranges; if pub400 firewalls that, a self-hosted runner
+     would be needed instead. *(Still open.)*
+   - ~~Confirm pub400.com itself has outbound HTTPS access to `github.com`~~ — **confirmed**: a
+     manual `git clone` of this repo from pub400 succeeded.
 5. **Secrets handling** — how to store the pub400 username and CI private key as GitHub Actions
    repository secrets, and how/when to rotate them.
 6. **Shared-system concurrency** — pub400 hosts one `TODO` library today. Decide whether the
@@ -114,37 +124,59 @@ GitHub Actions.
 
 ---
 
-### Sub-Task 2 — Make the scripts CI-safe
+### Sub-Task 2 — Switch deploy from `scp` to a git-based pull, and make both scripts CI-safe
 
 **Intent**
-`ibmi-deploy.sh` and `ibmi-compile.sh` were written for an interactive developer session. CI
-needs explicit key auth and no interactive host-key prompts.
+`ibmi-deploy.sh` currently `scp`s whatever is on local disk, which is fine for one interactive
+developer but has no notion of *which commit* is on the server, no atomicity (a failed transfer
+can leave a half-updated tree), and no cheap rollback. Now that `git` is confirmed installed on
+pub400 (`/QOpenSys/pkgs/bin/git`), replace it with a `git clone` (first run) / `git fetch` +
+`git checkout <ref>` (subsequent runs) directly on the IFS. `ibmi-compile.sh` also needs CI-safe
+auth regardless of this change.
 
 **Expected Outcomes**
+- A one-time `git clone https://github.com/matsfan/todo.git <IFS_ROOT>` sets up the working copy
+  on pub400 (anonymous HTTPS clone — no GitHub credentials needed on pub400 since the repo is
+  public).
+- `ibmi-deploy.sh` becomes an SSH call that runs `git fetch && git checkout <ref> && git clean
+  -fdx` (or `git reset --hard <ref>`) in that IFS directory, where `<ref>` is the commit SHA
+  GitHub Actions is building — so what's compiled on pub400 always matches an exact, known git
+  commit, not "whatever files happened to be on someone's laptop."
 - Both scripts accept an SSH identity file (env var or flag) instead of assuming the default
-  key/agent.
+  key/agent, for CI use.
 - Host key checking is handled deliberately (e.g. `StrictHostKeyChecking=accept-new` with a
   pinned `known_hosts`, not blind `StrictHostKeyChecking=no`).
-- Scripts still work unchanged for local interactive use (don't break the existing VS Code
-  tasks).
+- Scripts still work for local interactive use (don't break the existing VS Code tasks — the
+  local dev flow can still be "run the deploy task," it just now runs `git fetch`/`checkout`
+  remotely instead of `scp`).
 
 **Todo List**
-1. Add identity-file support to both scripts (e.g. `ssh -i "${IBMI_SSH_KEY_PATH}" ...`).
-2. Decide and implement a host-key verification approach for first connection from a fresh CI
+1. ~~Manually verify `git clone https://github.com/matsfan/todo.git` works over SSH on
+   pub400~~ — **done, confirmed working.**
+2. Rewrite `ibmi-deploy.sh` to SSH in and run `git fetch`/`checkout <ref>` against the IFS clone
+   instead of `scp -r`; keep the one-time-clone bootstrap as a documented manual step (or a
+   `git clone || git fetch` fallback the script detects).
+3. Add identity-file support to both scripts (e.g. `ssh -i "${IBMI_SSH_KEY_PATH}" ...`).
+4. Decide and implement a host-key verification approach for first connection from a fresh CI
    runner.
-3. **Flag for RPG-teammate/DevOps pairing review**: `ibmi-compile.sh`'s `chk_del` helper
+5. **Flag for RPG-teammate/DevOps pairing review**: `ibmi-compile.sh`'s `chk_del` helper
    (lines 16–18) combines the existence check and delete in one `&&`/`||` chain with a trailing
    `|| true` — today that also silently swallows a *failed delete* (for any reason other than
    "object doesn't exist"), not just a missing object. Worth tightening before this runs
    unattended in CI, since a silently-failed `DLTF`/`DLTPGM` would make the next `CRT*` step
    fail with a confusing "object already exists" error instead.
-4. Re-run both scripts manually against pub400.com to confirm no regression.
+6. Re-run both scripts manually against pub400.com to confirm no regression.
 
 **Relevant Context**
+- [scripts/ibmi-deploy.sh](../../scripts/ibmi-deploy.sh) — current `scp`-based version, being
+  replaced.
 - [scripts/ibmi-compile.sh:16-18](../../scripts/ibmi-compile.sh) — the `chk_del` function.
 - This script already deletes and recompiles every object on every run (documented in
   [deploy-scripts-plan.md](../../deploy-scripts-plan.md)) — fine for 3 objects today; revisit if
   Sub-Task 7 (Bob) is adopted later.
+- Side benefit worth calling out to the team: because the IFS copy is now a real git checkout,
+  "roll back a bad deploy" becomes `git checkout <previous-good-sha>` + recompile, rather than
+  needing a separate `SAVLIB`/`RSTLIB` snapshot strategy.
 
 **Status:** [ ] not started
 
@@ -190,9 +222,12 @@ of requiring someone to run VS Code tasks by hand.
 
 **Expected Outcomes**
 - `.github/workflows/ci.yml` exists.
-- On push/PR (scope decided in Sub-Task 5), it: checks out the repo, sets up the SSH key from
-  secrets, runs `ibmi-deploy.sh`, then `ibmi-compile.sh`, then the new test stage from
-  Sub-Task 3, and fails the check if any step fails.
+- On push/PR (scope decided in Sub-Task 5), it: sets up the SSH key from secrets, runs
+  `ibmi-deploy.sh $IBMI_USER ${{ github.sha }}` (which now `git fetch`/`checkout`s that exact
+  commit on pub400 rather than copying local files — the runner doesn't even need its own
+  checkout of the repo for this step, since pub400 pulls directly from GitHub), then
+  `ibmi-compile.sh`, then the new test stage from Sub-Task 3, and fails the check if any step
+  fails.
 - No self-hosted runner needed — a standard GitHub-hosted Ubuntu runner just SSHes out to
   pub400.com (confirm this is reachable per research item 4).
 
