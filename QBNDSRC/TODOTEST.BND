@@ -1,0 +1,11 @@
+STRPGMEXP PGMLVL(*CURRENT) SIGNATURE('TODOTEST_1')
+  EXPORT SYMBOL('setUp')
+  EXPORT SYMBOL('tearDown')
+  EXPORT SYMBOL('testGetNextId_WithRecords')
+  EXPORT SYMBOL('testGetNextId_NoHigherRecord')
+  EXPORT SYMBOL('testValidateDescription_Blank')
+  EXPORT SYMBOL('testValidateDescription_Spaces')
+  EXPORT SYMBOL('testValidateDescription_Valid')
+  EXPORT SYMBOL('testAddTodoRecord')
+  EXPORT SYMBOL('testMarkDoneRecord')
+ENDPGMEXP

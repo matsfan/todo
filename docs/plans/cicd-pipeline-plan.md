@@ -326,33 +326,56 @@ Once the workflow has proven reliable, make it actually gate merges instead of b
 
 ---
 
-### Sub-Task 7 (optional / future) — Adopt Bob (`makei`) for incremental builds
+### Sub-Task 7 — Adopt TOBi (`makei`) for incremental builds
 
 **Intent**
 Replace the hand-maintained delete-everything-and-recompile-all logic in `ibmi-compile.sh` with
-IBM's open-source Bob build tool, once the program has enough objects that manually keeping the
-compile order correct becomes a maintenance burden. Not needed for today's 3-object program.
+IBM's open-source TOBi build tool (formerly "Bob"/"Better Object Builder"). Originally deferred
+as "optional / future" pending a concrete pain point — the team decided to switch now anyway.
 
 **Expected Outcomes**
-- Confirmation of whether `bob`/`makei` is actually installed on the target profile (research
-  item 7).
-- If adopted: `makei build` (or `makei compile -f <file>`) replaces the ordered `CRT*` sequence
-  in `ibmi-compile.sh`, driven by a Bob `Rules.mk` / `iproj.json`.
+- Confirmation of whether `makei` is actually installed on the target profile (research item 7).
+- `makei build` replaces the ordered `CRT*` sequence in `ibmi-compile.sh`, driven by a TOBi
+  `Rules.mk` / `iproj.json`.
 
 **Todo List**
-1. Confirm `/QOpenSys/pkgs/bin/makei` is present and working on pub400 (it's already referenced
-   in [`.vscode/actions.json:106,119`](../../.vscode/actions.json), suggesting it may already be
-   available).
-2. If available, prototype `makei build` against a throwaway library and compare output/behavior
-   to the current script.
-3. Defer actually switching CI over to it until there's a concrete pain point (e.g. adding more
-   RPG objects makes `AGENTS.md`'s manually-documented compile order hard to keep correct).
+1. ~~Confirm `/QOpenSys/pkgs/bin/makei` is present and working on pub400~~ — **not yet verified
+   live**; it's referenced in [`.vscode/actions.json:106,119`](../../.vscode/actions.json), which
+   is the only prior evidence it's available on this profile.
+2. ~~Add `iproj.json` and `Rules.mk` (root + `QDDSSRC/`, `QRPGLESRC/`, new `QBNDSRC/`)~~ —
+   **drafted**, mirroring the exact dependency order documented in `AGENTS.md`. Required adding
+   binder source (`QBNDSRC/TODOBL.BND`, `QBNDSRC/TODOTEST.BND`) since TOBi has no rule for
+   building a `*SRVPGM` straight from a module — see `AGENTS.md`'s Compile Commands section for
+   why.
+3. ~~Rewrite `ibmi-compile.sh` to call `makei build` instead of the `CRT*`/`chk_del` sequence~~ —
+   **drafted**. This also retires the `chk_del` helper flagged in Sub-Task 2 item 5 — TOBi does
+   its own dependency-aware rebuild instead of deleting and recreating every object every run.
+4. **Not yet done — prototype `makei build` against pub400 and compare output/behavior to the
+   old script**, i.e. what this sub-task originally asked for before adopting. In particular:
+   - Confirm `makei` picks up `BUILDLIB=*CURLIB` the same way the existing
+     `.vscode/actions.json` "Build all with TOBi" action does.
+   - Confirm the `TODOTEST.SRVPGM` rule's `| /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM` order-only
+     prerequisite actually resolves `BNDSRVPGM(RPGUNIT/RUCRTTST)` the way the old explicit CL
+     command did (flagged in `AGENTS.md` for RPG-teammate review, same as Sub-Task 9).
+   - Confirm the binder source symbol case in `QBNDSRC/TODOTEST.BND` doesn't break RPGUnit's
+     "test"-prefix discovery.
+   - Compare a job log from a `makei build` run against the old script's `DSPJOBLOG` output for
+     the same object (`TGTCCSID`/`DBGVIEW`/`OPTION` — TOBi's own defaults were used as-is rather
+     than overridden, on the understanding that TOBi auto-detects IFS source CCSID; this needs a
+     real run to confirm it lands on `*JOB` semantics like the old script's explicit
+     `TGTCCSID(*JOB)`).
+5. Once 4 passes, this can be treated as done rather than a draft awaiting review.
 
 **Relevant Context**
-- [github.com/IBM/sourceorbit](https://github.com/IBM/sourceorbit) pairs with Bob for dependency
-  discovery, if/when this is revisited.
+- [github.com/IBM/sourceorbit](https://github.com/IBM/sourceorbit) pairs with TOBi for
+  dependency discovery — not adopted here since `Rules.mk` was written by hand for this small a
+  program; revisit if the object count grows enough to make that tedious.
+- This was drafted by an AI agent with no way to SSH into pub400 and run `makei build` — treat
+  the `Rules.mk`/binder-source/`ibmi-compile.sh` changes as exactly the kind of agent-authored
+  CL/build change this plan's intro asks an RPG-experienced teammate to review before CI relies
+  on them unattended.
 
-**Status:** [ ] not started
+**Status:** [~] drafted, not yet verified against pub400
 
 ---
 

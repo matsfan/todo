@@ -5,14 +5,18 @@ This file provides guidance to agents when working with code in this repository.
 ## Project
 
 IBM i RPG 5250 green-screen todo application targeting pub400.com.
-No package manager, no build tool — compilation happens on the IBM i server via CL commands.
+No package manager — compilation happens on the IBM i server, driven by **TOBi**
+(`/QOpenSys/pkgs/bin/makei build`), not hand-run CL commands.
 
 ## Repo Layout
 
 ```
 QDDSSRC/        ← DDS source, pulled directly onto the IFS on pub400 via `git clone`/`git pull`
 QRPGLESRC/      ← RPG source, same git-based deploy — no source physical file involved
+QBNDSRC/        ← Binder source (TOBi requires this to build a *SRVPGM; see Compile Commands)
 docs/           ← Human-readable docs only (not uploaded to IBM i)
+iproj.json      ← TOBi project config (target library, build command)
+Rules.mk        ← TOBi build rules (root + one per source directory)
 ```
 
 File extensions are IBM i member types: `.PF`, `.LF`, `.DSPF`, `.RPGLE`
@@ -27,23 +31,38 @@ library with no extra setup. See
 [docs/plans/cicd-pipeline-plan.md](docs/plans/cicd-pipeline-plan.md) Sub-Task 2 for the full
 story of why this changed from an earlier hardcoded `TODO` library.
 
-## Compile Commands (must run in this exact order)
+## Compile Commands
+
+`scripts/ibmi-compile.sh` builds via **TOBi** (`/QOpenSys/pkgs/bin/makei build`, formerly
+"Bob"/"Better Object Builder") against source deployed by `scripts/ibmi-deploy.sh`, driven by
+the project's `iproj.json` and per-directory `Rules.mk` files rather than a hand-maintained CL
+sequence. See `docs/plans/cicd-pipeline-plan.md` Sub-Task 7 for why this replaced the old
+delete-everything-and-recompile-all script.
+
+The dependency order TOBi builds in is still the one that matters when editing `Rules.mk`:
 
 ```cl
 CRTPF     FILE(*CURLIB/TODOPF)     SRCSTMF('.../QDDSSRC/TODOPF.PF')
 CRTLF     FILE(*CURLIB/TODOLF)     SRCSTMF('.../QDDSSRC/TODOLF.LF')
 CRTDSPF   FILE(*CURLIB/TODODSPPF)  SRCSTMF('.../QDDSSRC/TODODSPPF.DSPF')
-CRTBNDDIR BNDDIR(*CURLIB/TODOBND)
 CRTRPGMOD MODULE(*CURLIB/TODOBL)   SRCSTMF('.../QRPGLESRC/TODOBL.RPGLE')
-CRTSRVPGM SRVPGM(*CURLIB/TODOBL)  MODULE(*CURLIB/TODOBL)
-ADDBNDDIRE BNDDIR(*CURLIB/TODOBND) OBJ((*CURLIB/TODOBL *SRVPGM))
+CRTSRVPGM SRVPGM(*CURLIB/TODOBL)  MODULE(*CURLIB/TODOBL) SRCSTMF('.../QBNDSRC/TODOBL.BND')
+CRTBNDDIR BNDDIR(*CURLIB/TODOBND) (with TODOBL *SRVPGM added)
 CRTBNDRPG PGM(*CURLIB/TODOMAIN)   SRCSTMF('.../QRPGLESRC/TODOMAIN.RPGLE') BNDDIR(*CURLIB/TODOBND)
 CRTRPGMOD MODULE(*CURLIB/TODOTEST) SRCSTMF('.../QRPGLESRC/TODOTEST.RPGLE')
-CRTSRVPGM SRVPGM(*CURLIB/TODOTEST) MODULE(*CURLIB/TODOTEST) BNDDIR(*CURLIB/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)
+CRTSRVPGM SRVPGM(*CURLIB/TODOTEST) MODULE(*CURLIB/TODOTEST) SRCSTMF('.../QBNDSRC/TODOTEST.BND')
+          BNDDIR(*CURLIB/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)
 ```
 
-`scripts/ibmi-compile.sh` runs this exact sequence (with `OPTION(*EVENTF) DBGVIEW(*SOURCE)
-TGTCCSID(*JOB)` on each compile step) against source deployed by `scripts/ibmi-deploy.sh`.
+`QBNDSRC/TODOBL.BND` and `QBNDSRC/TODOTEST.BND` are binder source added for TOBi — it has no
+rule for building a `*SRVPGM` straight from a module the way plain `CRTSRVPGM ... MODULE(...)`
+(implicit `EXPORT(*ALL)`) does, so each service program's exports are now declared explicitly
+via `STRPGMEXP`/`EXPORT SYMBOL`/`ENDPGMEXP`, matching the `EXPORT`-flagged procedures already in
+`TODOBL.RPGLE`/`TODOTEST.RPGLE`. **Flagged for RPG-teammate review before this runs unattended in
+CI** (per Sub-Task 9's existing convention): the `TODOTEST.SRVPGM` rule in `QBNDSRC/Rules.mk`
+reaches `RPGUNIT/RUCRTTST` via a `| /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM` order-only
+prerequisite — this is TOBi's documented mechanism for binding to a service program in another
+library, but it hasn't been exercised against a real `makei build` run on pub400 yet.
 
 Run: `CALL *CURLIB/TODOMAIN`
 

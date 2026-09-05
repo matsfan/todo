@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "description": "IBM i RPG 5250 green-screen todo application (pub400.com)",
+  "objlib": "&CURLIB",
+  "curlib": "&CURLIB",
+  "includePath": [],
+  "preUsrlibl": ["RPGUNIT"],
+  "postUsrlibl": [],
+  "setIBMiEnvCmd": [],
+  "buildCommand": "/QOpenSys/pkgs/bin/makei build",
+  "buildObjectCommand": "/QOpenSys/pkgs/bin/makei b -t {object}",
+  "compileCommand": "/QOpenSys/pkgs/bin/makei c -f {filename}"
+}
