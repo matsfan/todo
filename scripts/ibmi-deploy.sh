@@ -45,8 +45,14 @@ else
   cd "${IFS_ROOT}"
 fi
 
-git checkout "${REF}"
-git reset --hard "${REF}"
+if git rev-parse --verify "origin/${REF}" >/dev/null 2>&1; then
+  TARGET="origin/${REF}"
+else
+  TARGET="${REF}"
+fi
+
+git checkout --detach "\$TARGET"
+git reset --hard "\$TARGET"
 git clean -fdx
 
 echo "Deployed \$(git rev-parse HEAD) (${REF}) to ${IFS_ROOT}"
