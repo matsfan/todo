@@ -21,12 +21,20 @@ fi
 # Sub-Task 2, item 5. That also silently swallows a *failed* delete, not just a
 # missing object. Flagged for RPG-teammate review before this runs unattended in
 # CI; left unchanged here since it's a CL-semantics call, not a CI-plumbing one.
+#
+# NOTE: every `system "..."` call below redirects stdin from /dev/null. This whole
+# script is fed to the remote shell over its own stdin (the ssh <<ENDSSH heredoc).
+# When a CL command run via `system` fails, its error-handling path reads stdin
+# for an inquiry-style reply — without </dev/null that read consumes the rest of
+# THIS heredoc, silently skipping every remaining line with no error shown. Found
+# by reproducing it live: a failing CHKOBJ with no redirect swallowed everything
+# after it and exited as if nothing happened.
 ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" <<ENDSSH
 set -e
 
 # Helper: delete an object only if it exists
 chk_del() {
-  system "CHKOBJ OBJ(\$1) OBJTYPE(\$2)" && system "\$3" || true
+  system "CHKOBJ OBJ(\$1) OBJTYPE(\$2)" </dev/null && system "\$3" </dev/null || true
 }
 
 # --- Clean up existing objects (reverse dependency order) ---
@@ -43,34 +51,34 @@ chk_del "*CURLIB/TODOPF"   "*FILE"   "DLTF FILE(*CURLIB/TODOPF)"
 # --- Compile in dependency order ---
 
 # 1. Physical file
-system "CRTPF FILE(*CURLIB/TODOPF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODOPF.PF')"
+system "CRTPF FILE(*CURLIB/TODOPF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODOPF.PF')" </dev/null
 
 # 2. Logical file
-system "CRTLF FILE(*CURLIB/TODOLF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODOLF.LF')"
+system "CRTLF FILE(*CURLIB/TODOLF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODOLF.LF')" </dev/null
 
 # 3. Display file
-system "CRTDSPF FILE(*CURLIB/TODODSPPF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODODSPPF.DSPF') RSTDSP(*NO) OPTION(*EVENTF)"
+system "CRTDSPF FILE(*CURLIB/TODODSPPF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODODSPPF.DSPF') RSTDSP(*NO) OPTION(*EVENTF)" </dev/null
 
 # 4. Binding directory
-system "CRTBNDDIR BNDDIR(*CURLIB/TODOBND)"
+system "CRTBNDDIR BNDDIR(*CURLIB/TODOBND)" </dev/null
 
 # 5. Business logic module
-system "CRTRPGMOD MODULE(*CURLIB/TODOBL) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOBL.RPGLE') OPTION(*EVENTF) DBGVIEW(*SOURCE) TGTCCSID(*JOB)"
+system "CRTRPGMOD MODULE(*CURLIB/TODOBL) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOBL.RPGLE') OPTION(*EVENTF) DBGVIEW(*SOURCE) TGTCCSID(*JOB)" </dev/null
 
 # 6. Business logic service program
-system "CRTSRVPGM SRVPGM(*CURLIB/TODOBL) MODULE(*CURLIB/TODOBL)"
+system "CRTSRVPGM SRVPGM(*CURLIB/TODOBL) MODULE(*CURLIB/TODOBL)" </dev/null
 
 # 7. Add service program to binding directory
-system "ADDBNDDIRE BNDDIR(*CURLIB/TODOBND) OBJ((*CURLIB/TODOBL *SRVPGM))"
+system "ADDBNDDIRE BNDDIR(*CURLIB/TODOBND) OBJ((*CURLIB/TODOBL *SRVPGM))" </dev/null
 
 # 8. Main program
-system "CRTBNDRPG PGM(*CURLIB/TODOMAIN) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOMAIN.RPGLE') OPTION(*EVENTF) DBGVIEW(*SOURCE) TGTCCSID(*JOB) BNDDIR(*CURLIB/TODOBND)"
+system "CRTBNDRPG PGM(*CURLIB/TODOMAIN) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOMAIN.RPGLE') OPTION(*EVENTF) DBGVIEW(*SOURCE) TGTCCSID(*JOB) BNDDIR(*CURLIB/TODOBND)" </dev/null
 
 # 9. Test module
-system "CRTRPGMOD MODULE(*CURLIB/TODOTEST) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOTEST.RPGLE') OPTION(*EVENTF) DBGVIEW(*SOURCE) TGTCCSID(*JOB)"
+system "CRTRPGMOD MODULE(*CURLIB/TODOTEST) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOTEST.RPGLE') OPTION(*EVENTF) DBGVIEW(*SOURCE) TGTCCSID(*JOB)" </dev/null
 
 # 10. Test service program
-system "CRTSRVPGM SRVPGM(*CURLIB/TODOTEST) MODULE(*CURLIB/TODOTEST) BNDDIR(*CURLIB/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)"
+system "CRTSRVPGM SRVPGM(*CURLIB/TODOTEST) MODULE(*CURLIB/TODOTEST) BNDDIR(*CURLIB/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)" </dev/null
 
 echo "Compile complete."
 ENDSSH
