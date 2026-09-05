@@ -50,14 +50,24 @@ chk_del "*CURLIB/TODOPF"   "*FILE"   "DLTF FILE(*CURLIB/TODOPF)"
 
 # --- Compile in dependency order ---
 
+# CRTPF/CRTLF/CRTDSPF (DDS-based commands) have no SRCSTMF parameter at all —
+# only the free-form language compilers (CRTBNDRPG, CRTRPGMOD) support compiling
+# straight from an IFS stream file. DDS still requires a source physical file
+# member, so bridge the git-cloned IFS files into one via CPYFRMSTMF first.
+system "CRTSRCPF FILE(*CURLIB/QDDSSRC) RCDLEN(112) TEXT('DDS source (git-managed, see QDDSSRC/ in repo)')" </dev/null || true
+
+system "CPYFRMSTMF FROMSTMF('${IFS_ROOT}/QDDSSRC/TODOPF.PF') TOMBR('/QSYS.LIB/QDDSSRC.FILE/TODOPF.MBR') MBROPT(*REPLACE) STMFCCSID(1208) DBFCCSID(*FILE)" </dev/null
+system "CPYFRMSTMF FROMSTMF('${IFS_ROOT}/QDDSSRC/TODOLF.LF') TOMBR('/QSYS.LIB/QDDSSRC.FILE/TODOLF.MBR') MBROPT(*REPLACE) STMFCCSID(1208) DBFCCSID(*FILE)" </dev/null
+system "CPYFRMSTMF FROMSTMF('${IFS_ROOT}/QDDSSRC/TODODSPPF.DSPF') TOMBR('/QSYS.LIB/QDDSSRC.FILE/TODODSPPF.MBR') MBROPT(*REPLACE) STMFCCSID(1208) DBFCCSID(*FILE)" </dev/null
+
 # 1. Physical file
-system "CRTPF FILE(*CURLIB/TODOPF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODOPF.PF')" </dev/null
+system "CRTPF FILE(*CURLIB/TODOPF) SRCFILE(*CURLIB/QDDSSRC) SRCMBR(TODOPF)" </dev/null
 
 # 2. Logical file
-system "CRTLF FILE(*CURLIB/TODOLF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODOLF.LF')" </dev/null
+system "CRTLF FILE(*CURLIB/TODOLF) SRCFILE(*CURLIB/QDDSSRC) SRCMBR(TODOLF)" </dev/null
 
 # 3. Display file
-system "CRTDSPF FILE(*CURLIB/TODODSPPF) SRCSTMF('${IFS_ROOT}/QDDSSRC/TODODSPPF.DSPF') RSTDSP(*NO) OPTION(*EVENTF)" </dev/null
+system "CRTDSPF FILE(*CURLIB/TODODSPPF) SRCFILE(*CURLIB/QDDSSRC) SRCMBR(TODODSPPF) RSTDSP(*NO) OPTION(*EVENTF)" </dev/null
 
 # 4. Binding directory
 system "CRTBNDDIR BNDDIR(*CURLIB/TODOBND)" </dev/null
