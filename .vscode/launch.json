@@ -10,16 +10,16 @@
       "type": "IBMiDebug",
       "request": "launch",
       "name": "Deploy, Compile, Debug TODOMAIN",
-      "program": "TODO/TODOMAIN",
-      "startBatchJobCommand": "SBMJOB CMD(CALL PGM(TODO/TODOMAIN)) JOB(TODOMAIN) INLLIBL(TODO)",
+      "program": "*CURLIB/TODOMAIN",
+      "startBatchJobCommand": "SBMJOB CMD(CALL PGM(*CURLIB/TODOMAIN)) JOB(TODOMAIN) INLLIBL(*CURRENT)",
       "preLaunchTask": "IBM i: Deploy + Compile"
     },
     {
       "type": "IBMiDebug",
       "request": "launch",
       "name": "Compile only, then Debug TODOMAIN",
-      "program": "TODO/TODOMAIN",
-      "startBatchJobCommand": "SBMJOB CMD(CALL PGM(TODO/TODOMAIN)) JOB(TODOMAIN) INLLIBL(TODO)",
+      "program": "*CURLIB/TODOMAIN",
+      "startBatchJobCommand": "SBMJOB CMD(CALL PGM(*CURLIB/TODOMAIN)) JOB(TODOMAIN) INLLIBL(*CURRENT)",
       "preLaunchTask": "IBM i: Compile All"
     },
     {

@@ -5,9 +5,9 @@
      A* Used by TODOMAIN to read records in ID order when loading the subfile.
      A*
      A* Compile command (must compile TODOPF first):
-     A*   CRTLF FILE(TODO/TODOLF) SRCFILE(TODO/QDDSSRC) SRCMBR(TODOLF)
+     A*   CRTLF FILE(*CURLIB/TODOLF) SRCSTMF('.../QDDSSRC/TODOLF.LF')
      A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-     A          R TODOR                     PFILE(TODO/TODOPF)
+     A          R TODOR                     PFILE(*CURLIB/TODOPF)
      A*
      A* All fields inherited from TODOPF - no need to redefine them.
      A*

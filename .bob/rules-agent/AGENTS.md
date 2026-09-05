@@ -7,4 +7,4 @@
 - `GetNextId` uses `SETLL *END` + `READPE` on `TODOLF` to find the highest existing ID; it returns `1` when the file is empty.
 - `w_Found` is always assigned as `NOT %EOF(...)` immediately after `CHAIN` — do not introduce `%FOUND` checks; the pattern would be inconsistent.
 - DDS source uses fixed-column layout — never run a general code formatter on `.PF`, `.LF`, `.DSPF` files; columns 1–80 are significant.
-- The library name `TODO` is hardcoded in `PFILE(TODO/TODOPF)` inside `QDDSSRC/TODOLF.LF` and in every compile command — update both if the library changes.
+- The target library is `*CURLIB`, not a hardcoded name — used in `PFILE(*CURLIB/TODOPF)` inside `QDDSSRC/TODOLF.LF` and in every compile command, since pub400.com doesn't allow arbitrary library creation and each profile has its own pre-provisioned current library.

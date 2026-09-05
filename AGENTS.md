@@ -10,31 +10,44 @@ No package manager, no build tool — compilation happens on the IBM i server vi
 ## Repo Layout
 
 ```
-QDDSSRC/        ← DDS source (mirrors TODO/QDDSSRC source physical file on server)
-QRPGLESRC/      ← RPG source (mirrors TODO/QRPGLESRC source physical file on server)
+QDDSSRC/        ← DDS source, pulled directly onto the IFS on pub400 via `git clone`/`git pull`
+QRPGLESRC/      ← RPG source, same git-based deploy — no source physical file involved
 docs/           ← Human-readable docs only (not uploaded to IBM i)
 ```
 
 File extensions are IBM i member types: `.PF`, `.LF`, `.DSPF`, `.RPGLE`
 
+## Target library
+
+All compile commands target **`*CURLIB`**, not a hardcoded library name. Library creation is
+restricted on pub400.com (a shared free system) — each profile is pre-provisioned with its own
+current library (e.g. `MBPRICE1`), and `*CURLIB` resolves to whatever that is for the profile
+running the command. This also means each developer's work naturally lands in their own
+library with no extra setup. See
+[docs/plans/cicd-pipeline-plan.md](docs/plans/cicd-pipeline-plan.md) Sub-Task 2 for the full
+story of why this changed from an earlier hardcoded `TODO` library.
+
 ## Compile Commands (must run in this exact order)
 
 ```cl
-CRTPF     FILE(TODO/TODOPF)     SRCFILE(TODO/QDDSSRC)    SRCMBR(TODOPF)
-CRTLF     FILE(TODO/TODOLF)     SRCFILE(TODO/QDDSSRC)    SRCMBR(TODOLF)
-CRTDSPF   FILE(TODO/TODODSPPF)  SRCFILE(TODO/QDDSSRC)    SRCMBR(TODODSPPF)
-CRTBNDDIR BNDDIR(TODO/TODOBND)
-CRTPGM    MODULE(TODO/TODOBL)   SRCFILE(TODO/QRPGLESRC)   SRCMBR(TODOBL)
-CRTSRVPGM SRVPGM(TODO/TODOBL)  MODULE(TODO/TODOBL)
-ADDBNDDIRE BNDDIR(TODO/TODOBND) OBJ((TODO/TODOBL *SRVPGM))
-CRTBNDRPG PGM(TODO/TODOMAIN)   SRCFILE(TODO/QRPGLESRC)   SRCMBR(TODOMAIN) BNDDIR(TODO/TODOBND)
-CRTPGM    MODULE(TODO/TODOTEST) SRCFILE(TODO/QRPGLESRC)   SRCMBR(TODOTEST)
-CRTSRVPGM SRVPGM(TODO/TODOTEST) MODULE(TODO/TODOTEST) BNDDIR(TODO/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)
+CRTPF     FILE(*CURLIB/TODOPF)     SRCSTMF('.../QDDSSRC/TODOPF.PF')
+CRTLF     FILE(*CURLIB/TODOLF)     SRCSTMF('.../QDDSSRC/TODOLF.LF')
+CRTDSPF   FILE(*CURLIB/TODODSPPF)  SRCSTMF('.../QDDSSRC/TODODSPPF.DSPF')
+CRTBNDDIR BNDDIR(*CURLIB/TODOBND)
+CRTRPGMOD MODULE(*CURLIB/TODOBL)   SRCSTMF('.../QRPGLESRC/TODOBL.RPGLE')
+CRTSRVPGM SRVPGM(*CURLIB/TODOBL)  MODULE(*CURLIB/TODOBL)
+ADDBNDDIRE BNDDIR(*CURLIB/TODOBND) OBJ((*CURLIB/TODOBL *SRVPGM))
+CRTBNDRPG PGM(*CURLIB/TODOMAIN)   SRCSTMF('.../QRPGLESRC/TODOMAIN.RPGLE') BNDDIR(*CURLIB/TODOBND)
+CRTRPGMOD MODULE(*CURLIB/TODOTEST) SRCSTMF('.../QRPGLESRC/TODOTEST.RPGLE')
+CRTSRVPGM SRVPGM(*CURLIB/TODOTEST) MODULE(*CURLIB/TODOTEST) BNDDIR(*CURLIB/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)
 ```
 
-Run: `CALL TODO/TODOMAIN`
+`scripts/ibmi-compile.sh` runs this exact sequence (with `OPTION(*EVENTF) DBGVIEW(*SOURCE)
+TGTCCSID(*JOB)` on each compile step) against source deployed by `scripts/ibmi-deploy.sh`.
 
-Run tests: `RUCALLTST TSTPGM(TODO/TODOTEST)`
+Run: `CALL *CURLIB/TODOMAIN`
+
+Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)`
 
 ## Architecture
 
@@ -58,4 +71,4 @@ This split allows `TODOBL` to be bound by the RPGUnit test suite (`TODOTEST`) in
 - **Variable prefixes**: `w_` = module-level working storage, `l_` = local to a procedure, `DET*` = TODODET screen fields, `DEL*` = TODODEL screen fields, `SFL*` = subfile fields.
 - **DDS uses fixed-column layout** (columns 1–80): `A` in col 6, record/field name in cols 19–28, type in col 35, length/positions thereafter. Do not reformat DDS with a code formatter.
 - **Indicator map** is documented in both `TODODSPPF.DSPF` header and `TODOMAIN.RPGLE` header — keep both in sync when adding indicators.
-- **Library name is `TODO`** — hardcoded in all compile commands and `PFILE(TODO/TODOPF)` reference in `TODOLF.LF`. Update if deploying under a different library.
+- **Target library is `*CURLIB`** — used in all compile commands and the `PFILE(*CURLIB/TODOPF)` reference in `TODOLF.LF`, so it resolves per-profile rather than to one hardcoded library name (pub400.com doesn't allow arbitrary library creation).

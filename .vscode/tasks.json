@@ -35,8 +35,9 @@
       "type": "shell",
       "command": "ssh",
       "args": [
+        "-p", "2222",
         "${input:pub400User}@pub400.com",
-        "system \"RUCALLTST TSTPGM(TODO/TODOTEST)\""
+        "system \"RUCALLTST TSTPGM(*CURLIB/TODOTEST)\""
       ],
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
