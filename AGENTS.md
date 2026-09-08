@@ -99,7 +99,10 @@ Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)`
 and compile against pub400.com. Never hand-craft `scp` calls or `CRT*` commands directly.
 
 Credentials are read from a `.env` file at the repo root (git-ignored — never commit it). See
-`.env.example` for the required variables: `IBMI_USER` and `IBMI_IDENTITY`.
+`.env.example` for the required variables: `IBMI_USER`, `IBMI_IDENTITY`, and `IBMI_CURLIB` (the
+profile's pre-provisioned current library — fixed per pub400 profile, not auto-detected, since
+non-interactive SSH jobs have no reliable way to look it up: screen-oriented Display commands
+like `DSPUSRPRF` kill the SSH session outright when run without a pty).
 
 Bob runs these scripts automatically via a `Stop` hook (`.bob/hooks/ibmi-post-stop.sh`) after
 finishing implementation work. Build output is appended to `.bob/logs/ibmi-build.log`. The hook
