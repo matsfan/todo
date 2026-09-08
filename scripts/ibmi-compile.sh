@@ -22,36 +22,38 @@ fi
 # makei build is dependency-aware: it only rebuilds objects whose source (or
 # dependencies) changed since the last run.
 #
-# The remote script is passed as a 'bash -c' argument string rather than via a
-# heredoc on stdin. A heredoc pipes to the remote shell's stdin, which causes
-# makei to think stdin is a pipe and buffers/drops its progress output in some
-# SSH implementations. Passing an explicit 'bash -c <script>' argument keeps
-# the SSH channel's stdout/stderr fully connected to the local terminal so
-# makei output streams back in real time.
+# The remote script is written to a temp file locally and piped into
+# 'ssh ... bash' via process substitution.  This keeps the SSH channel's
+# stdout/stderr fully connected to the local terminal (no stdin redirection on
+# the ssh command itself) so makei output streams back in real time.
 #
 # Variables expanded locally (before the wire): IFS_ROOT, USER, TARGET.
-# Variables expanded remotely (on IBM i):        PATH, CURLIB.
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash -c "$(cat <<REMOTE
+# Variables expanded remotely (on IBM i):        CURLIB, PATH.
+REMOTE_SCRIPT=$(mktemp)
+trap 'rm -f "$REMOTE_SCRIPT"' EXIT
+
+cat > "$REMOTE_SCRIPT" << SCRIPT
 set -euo pipefail
 
-export PATH='/QOpenSys/pkgs/bin:\$PATH'
+export PATH="/QOpenSys/pkgs/bin:\$PATH"
 
-cd '${IFS_ROOT}'
+cd "${IFS_ROOT}"
 
 # makei resolves CURLIB from the environment -- it does not accept the CL
 # special value *CURLIB. Non-interactive SSH jobs don't expose the profile's
 # current library any other way, so look it up via DSPUSRPRF.
-CURLIB=\$(system \"DSPUSRPRF USRPRF(${USER}) TYPE(*BASIC)\" 2>/dev/null \
-  | grep 'Current library' | awk -F: '{print \$NF}' | tr -d ' ')
-if [ -z \"\$CURLIB\" ]; then
-  echo 'Could not determine current library for ${USER}' >&2
+CURLIB=\$(system "DSPUSRPRF USRPRF(${USER}) TYPE(*BASIC)" 2>/dev/null \
+  | grep "Current library" | awk -F: '{print \$NF}' | tr -d ' ')
+if [ -z "\$CURLIB" ]; then
+  echo "Could not determine current library for ${USER}" >&2
   exit 1
 fi
 export CURLIB
-echo \"Building into library \$CURLIB (target: ${TARGET})\"
+echo "Building into library \$CURLIB (target: ${TARGET})"
 
 OPT=*EVENTF makei build ${TARGET}
 
-echo 'Compile complete.'
-REMOTE
-)"
+echo "Compile complete."
+SCRIPT
+
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash < "$REMOTE_SCRIPT"
