@@ -74,10 +74,8 @@
      A                                      COLOR(WHT)
      A                                  7 75'----'
      A                                      COLOR(WHT)
-     A*  Valid options reminder at bottom
-     A                                 23  2'Valid options: 2=Edit  +
-     A                                      4=Delete  5=Mark Done'
-     A                                      COLOR(BLU)
+     A*  Valid options reminder at bottom (TEST: temporarily removed to
+     A*  isolate CPD7812 - row 23 is below the subfile's row 8-21 span)
      A*
      A*--------------------------------------------------------------------------
      A* TODODET - Add / Edit detail screen
@@ -93,7 +91,7 @@
      A                                      COLOR(BLU)
      A*  ID display (only visible during edit - controlled by RPG blanking field)
      A                                  5  2'Todo ID :'
-     A            DETID          5S 0O  5 12EDTCDE(Z)
+     A            DETID          5S 0O  5 12
      A*  Description input
      A                                  7  2'Description:'
      A            DETDESC       50A  B  7 15CHECK(LC)
@@ -122,7 +120,7 @@
      A                                  5  2'Delete this todo?'
      A                                      COLOR(RED)
      A                                  7  2'ID          :'
-     A            DELID          5S 0O  7 16EDTCDE(Z)
+     A            DELID          5S 0O  7 16
      A                                  9  2'Description:'
      A            DELDESC       50A  O  9 16
      A                                      COLOR(WHT)
