@@ -28,7 +28,7 @@ fi
 # NOTE: git clean -fdx wipes anything not tracked/committed in $IFS_ROOT on pub400.
 # Don't use this directory as a scratch space for ad-hoc edits between deploys.
 ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" <<ENDSSH
-set -e
+set -euo pipefail
 
 # Non-interactive SSH sessions don't always source .profile/.bashrc, so PATH may
 # not include the Open Source package dir where git actually lives — set it
