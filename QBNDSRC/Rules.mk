@@ -4,9 +4,9 @@
 # TODOBL.BND, whose symbols are the pre-existing uppercase EXTPROC names
 # that TODOMAIN.RPGLE and TODOTEST.RPGLE already prototype against.
 
-TODOBND.BNDDIR: TODOBL.SRVPGM
+TODOBND.BNDDIR: TODOBL.BND
 
-TODOBL.SRVPGM: TODOBL.BND TODOBL.MODULE
+TODOBL.BND: TODOBL.MODULE
 
 # TODOTEST.RPGLE calls TODOBL's exported procedures directly, so it needs
 # TODOBND the same way TODOMAIN does, in addition to RPGUnit's own runner
@@ -19,4 +19,4 @@ TODOBL.SRVPGM: TODOBL.BND TODOBL.MODULE
 # /QSYS.LIB/<lib>.LIB/<obj>.SRVPGM down to the object name) - confirmed by
 # reading TOBi's own build rules, but not yet exercised against a real
 # RPGUNIT install.
-TODOTEST.SRVPGM: TODOTEST.BND TODOTEST.MODULE TODOBND.BNDDIR | /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM
+TODOTEST.BND: TODOTEST.MODULE TODOBND.BNDDIR | /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM
