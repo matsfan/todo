@@ -43,10 +43,10 @@
      A                                      CA06(06 'F6=Add')
      A                                      ROLLUP(25 'Page Down')
      A                                      ROLLDOWN(26 'Page Up')
-     A                                 50   SFLDSP
-     A                                 51   SFLDSPCTL
-     A                                 52   SFLCLR
-     A                                 53   SFLEND(*MORE)
+     A  50                                  SFLDSP
+     A  51                                  SFLDSPCTL
+     A  52                                  SFLCLR
+     A  53                                  SFLEND(*MORE)
      A*  Screen title and instructions
      A                                       1  2'Todo List'
      A                                          DSPATR(HI)
