@@ -28,7 +28,7 @@
      A* Option input column (user types 2/4/5)
      A            SFLOPT         1A  B  8  2
      A* Display-only fields
-     A            TDID           5S 0O  8  4EDTCDE(Z)
+     A            TDID           5S 0O  8  4
      A            TDDESC        50A  O  8 11
      A            TDDUE           L  O  8 63DATFMT(*ISO)
      A            TDDONE         1A  O  8 75
