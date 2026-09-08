@@ -1,77 +1,28 @@
 #!/usr/bin/env bash
 # .bob/hooks/ibmi-post-stop.sh
-# Bob Stop hook — deploy source to pub400 then compile via TOBi.
 #
-# Receives Bob's hook JSON payload on stdin:
-#   {"session_id":"…","cwd":"…","hook_event_name":"Stop","last_assistant_message":…}
+# Bob Stop hook — runs automatically after Bob finishes implementation work.
+# Deploys the current local branch to pub400 and compiles all objects.
+# Output is appended to .bob/logs/ibmi-build.log.
 #
-# All output is appended to $cwd/.bob/logs/ibmi-build.log.
-# This script ALWAYS exits 0 so it never blocks or errors the Bob session.
+# Credentials are read from .env at the repo root (see .env.example).
+# If .env is missing or incomplete the scripts fail with a clear error message.
 
-set -uo pipefail
+set -euo pipefail
 
-# --- read cwd from Bob's JSON payload ----------------------------------------
-payload=$(cat)
-cwd=$(printf '%s' "$payload" | grep -o '"cwd":"[^"]*"' | head -1 | sed 's/"cwd":"//;s/"//')
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LOG_DIR="${REPO_ROOT}/.bob/logs"
+LOG_FILE="${LOG_DIR}/ibmi-build.log"
 
-if [ -z "$cwd" ]; then
-  # No cwd — nothing we can do; exit silently.
-  exit 0
-fi
+mkdir -p "$LOG_DIR"
 
-# --- source .env (silent if absent) ------------------------------------------
-# shellcheck source=/dev/null
-[ -f "$cwd/.env" ] && source "$cwd/.env"
+# Determine the branch currently checked out locally — this is what the deploy
+# script will instruct pub400 to check out.
+BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --short HEAD 2>/dev/null || git -C "$REPO_ROOT" rev-parse --short HEAD)
 
-# --- ensure log directory exists ---------------------------------------------
-log_dir="$cwd/.bob/logs"
-mkdir -p "$log_dir"
-log_file="$log_dir/ibmi-build.log"
+echo "=== IBM i deploy+compile: $(date '+%Y-%m-%d %H:%M:%S') branch=${BRANCH} ===" | tee -a "$LOG_FILE"
 
-# --- guard: IBMI_USER must be set --------------------------------------------
-if [ -z "${IBMI_USER:-}" ]; then
-  printf '[%s] WARNING: IBMI_USER is not set — skipping deploy+compile.\n' \
-    "$(date '+%Y-%m-%dT%H:%M:%S%z')" >> "$log_file"
-  exit 0
-fi
+bash "${REPO_ROOT}/scripts/ibmi-deploy.sh"  "$BRANCH"  2>&1 | tee -a "$LOG_FILE"
+bash "${REPO_ROOT}/scripts/ibmi-compile.sh"            2>&1 | tee -a "$LOG_FILE"
 
-# --- resolve git ref ---------------------------------------------------------
-if [ -z "${IBMI_GIT_REF:-}" ]; then
-  IBMI_GIT_REF=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null) || true
-  [ -z "$IBMI_GIT_REF" ] && IBMI_GIT_REF="main"
-fi
-
-# --- timestamped header ------------------------------------------------------
-{
-  printf '=%.0s' {1..72}
-  printf '\n'
-  printf '[%s] ibmi-post-stop: user=%s ref=%s\n' \
-    "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$IBMI_USER" "$IBMI_GIT_REF"
-  printf '=%.0s' {1..72}
-  printf '\n'
-} >> "$log_file"
-
-# --- deploy ------------------------------------------------------------------
-"$cwd/scripts/ibmi-deploy.sh" "$IBMI_USER" "$IBMI_GIT_REF" "${IBMI_IDENTITY:-}" \
-  >> "$log_file" 2>&1
-deploy_rc=$?
-
-# --- compile -----------------------------------------------------------------
-compile_rc=0
-if [ $deploy_rc -eq 0 ]; then
-  "$cwd/scripts/ibmi-compile.sh" "$IBMI_USER" "${IBMI_IDENTITY:-}" \
-    >> "$log_file" 2>&1
-  compile_rc=$?
-else
-  printf '[deploy failed with rc=%d — compile skipped]\n' "$deploy_rc" >> "$log_file"
-fi
-
-# --- footer ------------------------------------------------------------------
-overall_rc=$(( deploy_rc != 0 ? deploy_rc : compile_rc ))
-if [ $overall_rc -eq 0 ]; then
-  printf '[%s] PASS (rc=0)\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" >> "$log_file"
-else
-  printf '[%s] FAIL (rc=%d)\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$overall_rc" >> "$log_file"
-fi
-
-exit 0
+echo "=== Done: $(date '+%Y-%m-%d %H:%M:%S') ===" | tee -a "$LOG_FILE"

@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ -z "${1:-}" ]; then
-  echo "Usage: $0 <pub400-username> [ssh-identity-file] [make-target]" >&2
-  echo "  make-target  optional TOBi target, e.g. TODODSPPF.FILE (default: all)" >&2
-  exit 1
+# ---------------------------------------------------------------------------
+# Credentials — sourced from .env at the repo root (git-ignored).
+# Required variables: IBMI_USER, IBMI_IDENTITY
+# Optional variable:  IBMI_SSH_PORT (default: 2222)
+# See .env.example for the format.
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../.env"
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
 fi
 
-USER="$1"
-IDENTITY="${2:-}"
-TARGET="${3:-all}"
+USER="${IBMI_USER:?'.env must set IBMI_USER'}"
+IDENTITY="${IBMI_IDENTITY:?'.env must set IBMI_IDENTITY'}"
+TARGET="${1:-all}"
 IFS_ROOT="/home/$USER/source/todo"
 PORT="${IBMI_SSH_PORT:-2222}"
 
-SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-if [ -n "$IDENTITY" ]; then
-  SSH_OPTS+=(-i "$IDENTITY")
-fi
+SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
 
 # Builds via TOBi (makei), driven by the project's iproj.json/Rules.mk files.
 # makei build is dependency-aware: it only rebuilds objects whose source (or
