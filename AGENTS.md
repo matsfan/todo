@@ -93,6 +93,18 @@ Run: `CALL *CURLIB/TODOMAIN`
 
 Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)`
 
+## Deploy & Compile
+
+`scripts/ibmi-deploy.sh` and `scripts/ibmi-compile.sh` are the **only** permitted way to deploy
+and compile against pub400.com. Never hand-craft `scp` calls or `CRT*` commands directly.
+
+Credentials are read from a `.env` file at the repo root (git-ignored — never commit it). See
+`.env.example` for the required variables: `IBMI_USER` and `IBMI_IDENTITY`.
+
+Bob runs these scripts automatically via a `Stop` hook (`.bob/hooks/ibmi-post-stop.sh`) after
+finishing implementation work. Build output is appended to `.bob/logs/ibmi-build.log`. The hook
+deploys the currently checked-out local branch.
+
 ## Architecture
 
 The project uses a two-module design:
