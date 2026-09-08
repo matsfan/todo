@@ -21,7 +21,13 @@ fi
 # sequence this script used before - see docs/plans/cicd-pipeline-plan.md
 # Sub-Task 7. makei build is dependency-aware: it only rebuilds objects whose
 # source (or dependencies) changed since the last run.
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" <<ENDSSH
+#
+# The remote commands are passed via 'bash -s' (stdin) rather than a heredoc
+# on the ssh command itself. Both approaches pipe stdin to the remote shell,
+# but 'bash -s' explicitly binds the script to bash's stdin and keeps the SSH
+# channel's stdout/stderr fully connected to the local terminal, which ensures
+# makei's build output is always streamed back.
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash -s << ENDSSH
 set -e
 
 # Non-interactive SSH sessions don't always source .profile/.bashrc, so PATH may
