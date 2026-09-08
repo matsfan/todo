@@ -30,7 +30,7 @@
      A* Display-only fields
      A            TDID           5P 0O  8  4EDTCDE(Z)
      A            TDDESC        50A  O  8 11
-     A            TDDUE          L   O  8 63DATFMT(*ISO)
+     A            TDDUE           L  O  8 63DATFMT(*ISO)
      A            TDDONE         1A  O  8 75
      A*
      A*--------------------------------------------------------------------------
@@ -68,7 +68,7 @@
      A                                          COLOR(WHT)
      A                                       7  7'-----'
      A                                          COLOR(WHT)
-     A                                       7 11'--------------------------------------------------'
+     A                                       7 11'-----------------------------'
      A                                          COLOR(WHT)
      A                                       7 63'----------'
      A                                          COLOR(WHT)
@@ -89,7 +89,7 @@
      A            DETMODE       10A  O  1  2
      A                                       1 30'IBM i RPG Todo Application'
      A                                       3  2'Enter todo details then press+
-     A                                           Enter. F3/F12=Cancel'
+     A                                          Enter. F3/F12=Cancel'
      A                                          COLOR(BLU)
      A*  ID display (only visible during edit - controlled by RPG blanking field)
      A                                       5  2'Todo ID :'
@@ -100,12 +100,12 @@
      A                                          COLOR(GRN)
      A*  Due date input
      A                                       9  2'Due Date   :'
-     A            DETDUE         L   B  9 15DATFMT(*ISO)
+     A            DETDUE          L  B  9 15DATFMT(*ISO)
      A                                          COLOR(GRN)
      A                                       9 30'(YYYY-MM-DD)'
      A                                          COLOR(BLU)
      A*  Error / validation message
-     A                                 60   11  2'Description cannot be blank.  +
+     A  60                                  11  2'Description cannot be blank. +
      A                                          Press Enter to continue.'
      A                                          COLOR(RED)
      A*
@@ -127,7 +127,7 @@
      A            DELDESC       50A  O  9 16
      A                                          COLOR(WHT)
      A                                      11  2'Due Date   :'
-     A            DELDUE         L   O 11 16DATFMT(*ISO)
+     A            DELDUE          L  O 11 16DATFMT(*ISO)
      A                                          COLOR(WHT)
      A*  Confirmation instructions
      A                                      23  2'Press ENTER to delete.   +

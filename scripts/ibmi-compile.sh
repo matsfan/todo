@@ -29,7 +29,21 @@ set -e
 export PATH="/QOpenSys/pkgs/bin:\$PATH"
 
 cd "${IFS_ROOT}"
-OPT=*EVENTF BUILDLIB=*CURLIB makei build
+
+# iproj.json's curlib/objlib are "&CURLIB", which makei resolves from a real
+# CURLIB environment variable - it is not the CL special value *CURLIB, and
+# makei errors out immediately ("CURLIB must be defined first in the
+# environment variable") if it's unset. Non-interactive SSH jobs don't expose
+# the profile's current library any other way, so look it up explicitly.
+CURLIB=\$(system "DSPUSRPRF USRPRF(${USER}) TYPE(*BASIC)" 2>/dev/null | grep "Current library" | awk -F: '{print \$NF}' | tr -d ' ')
+if [ -z "\$CURLIB" ]; then
+  echo "Could not determine current library for ${USER}" >&2
+  exit 1
+fi
+export CURLIB
+echo "Building into library \$CURLIB"
+
+OPT=*EVENTF makei build
 
 echo "Compile complete."
 ENDSSH
