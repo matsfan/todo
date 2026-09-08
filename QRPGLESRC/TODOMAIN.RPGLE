@@ -134,7 +134,7 @@ DCL-PROC Main;
 
   DOU *IN03;                                  // Loop until F3=Exit
 
-    ExSr LoadSubfile;                         // Rebuild the subfile
+    LoadSubfile();                             // Rebuild the subfile
 
     // Show list screen and wait for user input
     EXFMT TODOCTL;
@@ -146,7 +146,7 @@ DCL-PROC Main;
 
     // ---- F6 Add new todo ---------------------------------------------------
     IF *IN06;
-      ExSr AddTodo;
+      AddTodo();
       ITER;
     ENDIF;
 
@@ -163,11 +163,11 @@ DCL-PROC Main;
 
       SELECT;
         WHEN w_Option = '2';                  // Edit
-          ExSr EditTodo;
+          EditTodo();
         WHEN w_Option = '4';                  // Delete
-          ExSr DeleteTodo;
+          DeleteTodo();
         WHEN w_Option = '5';                  // Mark done
-          ExSr MarkDone;
+          MarkDone();
         OTHER;
           // Unknown option - ignore
       ENDSL;
