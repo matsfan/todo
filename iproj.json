@@ -4,7 +4,7 @@
   "objlib": "&CURLIB",
   "curlib": "&CURLIB",
   "includePath": [],
-  "preUsrlibl": ["RPGUNIT"],
+  "preUsrlibl": [],
   "postUsrlibl": [],
   "setIBMiEnvCmd": [],
   "buildCommand": "/QOpenSys/pkgs/bin/makei build",

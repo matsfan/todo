@@ -1,4 +1,5 @@
 **FREE
+CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 //***************************************************************************
 // TODOMAIN - Todo Application Main Program  (thin UI shell)
 //
@@ -117,6 +118,12 @@ DCL-PR GetTodoById         IND
 END-PR;
 
 // ---------------------------------------------------------------------------
+// Program entry point
+// ---------------------------------------------------------------------------
+
+Main();
+
+// ---------------------------------------------------------------------------
 // Main Procedure
 // ---------------------------------------------------------------------------
 
@@ -135,13 +142,13 @@ DCL-PROC Main;
     // ---- F3 Exit -----------------------------------------------------------
     IF *IN03;
       LEAVE;
-    END-IF;
+    ENDIF;
 
     // ---- F6 Add new todo ---------------------------------------------------
     IF *IN06;
       ExSr AddTodo;
       ITER;
-    END-IF;
+    ENDIF;
 
     // ---- Process subfile option column -------------------------------------
     w_Rrn = 1;
@@ -149,7 +156,7 @@ DCL-PROC Main;
       READC TODOSFL;                          // Read changed subfile records
       IF %EOF(TODODSPPF);
         LEAVE;
-      END-IF;
+      ENDIF;
 
       w_Option = SFLOPT;
       w_SelId  = TDID;
@@ -163,13 +170,13 @@ DCL-PROC Main;
           ExSr MarkDone;
         OTHER;
           // Unknown option - ignore
-      END-SL;
+      ENDSL;
 
       SFLOPT = ' ';                           // Clear the option field
       w_Rrn += 1;
-    END-DO;
+    ENDDO;
 
-  END-DO;
+  ENDDO;
 
   // Clean up
   CloseFiles();
@@ -210,16 +217,16 @@ DCL-PROC LoadSubfile;
 
       IF NOT ReadNextTodo(l_Rec);
         LEAVE;
-      END-IF;
-    END-DO;
-  END-IF;
+      ENDIF;
+    ENDDO;
+  ENDIF;
 
   w_MaxRrn = w_Rrn;
 
   // Step 3: Display the subfile (only if rows were written)
   IF w_MaxRrn > 0;
     *IN50 = *ON;                              // SFLDSP on
-  END-IF;
+  ENDIF;
   *IN51 = *ON;                                // SFLDSPCTL on
   *IN53 = *ON;                                // SFLEND - show "More..." / "Bottom"
 
@@ -243,13 +250,13 @@ DCL-PROC AddTodo;
 
     IF *IN03 OR *IN12;
       LEAVE;
-    END-IF;
+    ENDIF;
 
     // Validate description
     IF NOT ValidateDescription(DETDESC);
       *IN60 = *ON;                            // Show error message
       ITER;
-    END-IF;
+    ENDIF;
 
     // Write new record
     w_NextId = GetNextId();
@@ -257,7 +264,7 @@ DCL-PROC AddTodo;
 
     LEAVE;
 
-  END-DO;
+  ENDDO;
 
 END-PROC;
 
@@ -271,7 +278,7 @@ DCL-PROC EditTodo;
 
   IF NOT GetTodoById(w_SelId: l_Rec);
     RETURN;
-  END-IF;
+  ENDIF;
 
   DETMODE  = 'Edit    ';
   DETID    = l_Rec.tdId;
@@ -285,20 +292,20 @@ DCL-PROC EditTodo;
 
     IF *IN03 OR *IN12;
       LEAVE;
-    END-IF;
+    ENDIF;
 
     // Validate description
     IF NOT ValidateDescription(DETDESC);
       *IN60 = *ON;
       ITER;
-    END-IF;
+    ENDIF;
 
     // Apply changes
     EditTodoRecord(w_SelId: DETDESC: DETDUE);
 
     LEAVE;
 
-  END-DO;
+  ENDDO;
 
 END-PROC;
 
@@ -322,7 +329,7 @@ DCL-PROC DeleteTodo;
 
   IF NOT GetTodoById(w_SelId: l_Rec);
     RETURN;
-  END-IF;
+  ENDIF;
 
   DELID   = l_Rec.tdId;
   DELDESC = l_Rec.tdDesc;
@@ -332,11 +339,7 @@ DCL-PROC DeleteTodo;
 
   IF NOT *IN12;                               // Enter = confirmed, not F12
     DeleteTodoRecord(w_SelId);
-  END-IF;
+  ENDIF;
 
 END-PROC;
 
-// ---------------------------------------------------------------------------
-// Program entry point
-// ---------------------------------------------------------------------------
-Main();

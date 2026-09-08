@@ -1,4 +1,5 @@
 **FREE
+CTL-OPT NOMAIN;
 //***************************************************************************
 // TODOBL - Todo Business Logic Service Program
 //
@@ -32,7 +33,10 @@
 // ---------------------------------------------------------------------------
 
 // Logical file - used for sequential reads and GetNextId positioning
-DCL-F TODOLF    DISK    KEYED USROPN;
+// RENAMEd because TODOLF's DDS reuses TODOPF's record format name (TODOR) -
+// RPG won't allow two files open in the same program to expose the same
+// external record-format name.
+DCL-F TODOLF    DISK    KEYED USROPN RENAME(TODOR:TODOLFR);
 
 // Physical file - used for WRITE / UPDATE / DELETE
 DCL-F TODOPF    DISK    KEYED USAGE(*UPDATE:*OUTPUT:*DELETE) USROPN;
@@ -150,12 +154,12 @@ DCL-PROC GetNextId          EXPORT;
   DCL-S l_Id PACKED(5:0) INZ(0);
 
   SETLL *END TODOLF;
-  READPE TODOR TODOLF;                          // Read last record
+  READP TODOLFR;                                // Read last record (unconditional - no key to match)
   IF NOT %EOF(TODOLF);
     l_Id = TDID + 1;
   ELSE;
     l_Id = 1;                                   // First ever record
-  END-IF;
+  ENDIF;
 
   RETURN l_Id;
 
@@ -191,7 +195,7 @@ DCL-PROC AddTodoRecord      EXPORT;
   TDDESC = i_Desc;
   TDDONE = '0';
   TDDUE  = i_Due;
-  WRITE TODOR TODOPF;
+  WRITE TODOR;
 
 END-PROC;
 
@@ -207,14 +211,14 @@ DCL-PROC EditTodoRecord     EXPORT;
     i_Due     DATE(*ISO)  CONST;
   END-PI;
 
-  CHAIN i_Id TODOPF TODOR;
+  CHAIN i_Id TODOPF;
   w_Found = NOT %EOF(TODOPF);
 
   IF w_Found;
     TDDESC = i_Desc;
     TDDUE  = i_Due;
-    UPDATE TODOR TODOPF;
-  END-IF;
+    UPDATE TODOR;
+  ENDIF;
 
 END-PROC;
 
@@ -228,11 +232,11 @@ DCL-PROC MarkDoneRecord     EXPORT;
     i_Id      PACKED(5:0) CONST;
   END-PI;
 
-  CHAIN i_Id TODOPF TODOR;
+  CHAIN i_Id TODOPF;
   IF NOT %EOF(TODOPF);
     TDDONE = '1';
-    UPDATE TODOR TODOPF;
-  END-IF;
+    UPDATE TODOR;
+  ENDIF;
 
 END-PROC;
 
@@ -248,10 +252,10 @@ DCL-PROC DeleteTodoRecord   EXPORT;
     i_Id      PACKED(5:0) CONST;
   END-PI;
 
-  CHAIN i_Id TODOPF TODOR;
+  CHAIN i_Id TODOPF;
   IF NOT %EOF(TODOPF);
-    DELETE TODOR TODOPF;
-  END-IF;
+    DELETE TODOR;
+  ENDIF;
 
 END-PROC;
 
@@ -284,10 +288,10 @@ DCL-PROC ReadNextTodo       EXPORT;
   END-PI;
 
   DOU %EOF(TODOLF);
-    READ TODOLF TODOR;
+    READ TODOLFR;
     IF %EOF(TODOLF);
       RETURN *OFF;
-    END-IF;
+    ENDIF;
 
     IF TDDONE <> '1';
       o_Rec.tdId   = TDID;
@@ -295,9 +299,9 @@ DCL-PROC ReadNextTodo       EXPORT;
       o_Rec.tdDone = TDDONE;
       o_Rec.tdDue  = TDDUE;
       RETURN *ON;
-    END-IF;
+    ENDIF;
 
-  END-DO;
+  ENDDO;
 
   RETURN *OFF;
 
@@ -315,7 +319,7 @@ DCL-PROC GetTodoById        EXPORT;
     o_Rec     LIKEDS(todoRec_t);
   END-PI;
 
-  CHAIN i_Id TODOPF TODOR;
+  CHAIN i_Id TODOPF;
   w_Found = NOT %EOF(TODOPF);
 
   IF w_Found;
@@ -323,7 +327,7 @@ DCL-PROC GetTodoById        EXPORT;
     o_Rec.tdDesc = TDDESC;
     o_Rec.tdDone = TDDONE;
     o_Rec.tdDue  = TDDUE;
-  END-IF;
+  ENDIF;
 
   RETURN w_Found;
 
