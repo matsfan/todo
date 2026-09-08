@@ -28,7 +28,7 @@
      A* Option input column (user types 2/4/5)
      A            SFLOPT         1A  B  8  2
      A* Display-only fields
-     A            TDID           5P 0O  8  4EDTCDE(Z)
+     A            TDID           5S 0O  8  4EDTCDE(Z)
      A            TDDESC        50A  O  8 11
      A            TDDUE           L  O  8 63DATFMT(*ISO)
      A            TDDONE         1A  O  8 75
@@ -93,7 +93,7 @@
      A                                          COLOR(BLU)
      A*  ID display (only visible during edit - controlled by RPG blanking field)
      A                                       5  2'Todo ID :'
-     A            DETID          5P 0O  5 12EDTCDE(Z)
+     A            DETID          5S 0O  5 12EDTCDE(Z)
      A*  Description input
      A                                       7  2'Description:'
      A            DETDESC       50A  B  7 15CHECK(LC)
@@ -122,7 +122,7 @@
      A                                       5  2'Delete this todo?'
      A                                          COLOR(RED)
      A                                       7  2'ID          :'
-     A            DELID          5P 0O  7 16EDTCDE(Z)
+     A            DELID          5S 0O  7 16EDTCDE(Z)
      A                                       9  2'Description:'
      A            DELDESC       50A  O  9 16
      A                                          COLOR(WHT)
