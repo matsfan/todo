@@ -1,5 +1,16 @@
 # Deploy & Compile Hook Plan
 
+> **Update (2026-09-08):** the scripts evolved past what this plan describes once the
+> hook was actually exercised end-to-end for the first time. `.env` now also requires
+> `IBMI_CURLIB` (DSPUSRPRF and other screen-oriented Display commands kill a
+> non-interactive SSH session outright, so the current library can't be looked up at
+> build time -- see `scripts/ibmi-compile.sh`), the scripts no longer take
+> user/identity as positional args (everything comes from `.env`), and
+> `scripts/ibmi-compile.sh` now also explicitly builds `TODOBL.SRVPGM`/`TODOBND.BNDDIR`
+> and binds `TODOMAIN.PGM` against `TODOBND` itself -- TOBi's Rules.mk-driven build
+> cannot do either on this pub400 install. This doc is kept as-is below for the
+> original design history; treat the scripts themselves as the source of truth.
+
 ## Overview
 
 Mandate that Bob always uses `scripts/ibmi-deploy.sh` and `scripts/ibmi-compile.sh` for every
