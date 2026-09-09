@@ -74,8 +74,12 @@
      A                                      COLOR(WHT)
      A                                  7 75'----'
      A                                      COLOR(WHT)
-     A*  Valid options reminder at bottom (TEST: temporarily removed to
-     A*  isolate CPD7812 - row 23 is below the subfile's row 8-21 span)
+     A*  Valid options reminder removed: it sat at row 23, below the
+     A*  subfile's own row 8-21 span. Content in a subfile control record
+     A*  below the subfile itself triggers CPD7812 "Subfile control
+     A*  record overlaps subfile record" -- per IBM i convention this
+     A*  needs its own separate record format (written before/alongside
+     A*  TODOCTL), which is a larger DDS+RPG restructure left for later.
      A*
      A*--------------------------------------------------------------------------
      A* TODODET - Add / Edit detail screen

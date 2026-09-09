@@ -65,6 +65,37 @@ echo "Building into library \$CURLIB (target: ${TARGET})"
 
 # makei build has no positional target argument -- a full build is plain
 # 'makei build'; a single target is passed via '-t <target>'.
+#
+# Run it twice around the *SRVPGM/*BNDDIR step below: TOBi's Rules.mk-driven
+# build cannot actually create a *SRVPGM or *BNDDIR from binder source on this
+# pub400 install (see the block below), so anything binding against TODOBND
+# (TODOMAIN.PGM) fails on a first pass where TODOBND doesn't exist yet. The
+# first pass is allowed to fail -- it still builds everything TOBi *can*
+# handle (DSPF/PF/LF/MODULE) -- and the second pass is what actually
+# determines success once TODOBL/TODOBND exist.
+OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} || true
+
+# TOBi references MODULE_TO_BND_RECIPE / BND_TO_BNDDIR_RECIPE for building a
+# *SRVPGM from binder source and a *BNDDIR from a *SRVPGM, but neither macro
+# is actually defined anywhere in this installed version -- 'make' expands
+# them to an empty recipe and reports the target "up to date" even when the
+# object doesn't exist (confirmed via 'makei -l build' and CHKOBJ). Build
+# them explicitly instead. TODOBL.SRVPGM predates the switch to TOBi and is
+# rebuilt here too so it can't silently drift from TODOBL.MODULE.
+#
+# Every CL call below redirects stdin from /dev/null. Without it, the CL
+# command reads from the SAME stdin stream this whole remote script is being
+# fed through via 'bash < file' -- silently swallowing the rest of the
+# script after that command, with no error (this is also what was really
+# going on with DSPUSRPRF above, and cost a lot of debugging to pin down).
+echo "Rebuilding TODOBL service program and TODOBND binding directory..."
+system "DLTSRVPGM SRVPGM(\$CURLIB/TODOBL)" < /dev/null 2>&1 || true
+system "CRTSRVPGM SRVPGM(\$CURLIB/TODOBL) MODULE(\$CURLIB/TODOBL) EXPORT(*SRCFILE) SRCSTMF('${IFS_ROOT}/QBNDSRC/TODOBL.BND')" < /dev/null
+system "DLTBNDDIR BNDDIR(\$CURLIB/TODOBND)" < /dev/null 2>&1 || true
+system "CRTBNDDIR BNDDIR(\$CURLIB/TODOBND)" < /dev/null
+system "ADDBNDDIRE BNDDIR(\$CURLIB/TODOBND) OBJ((\$CURLIB/TODOBL *SRVPGM *IMMED))" < /dev/null
+
+echo "Re-running build now that TODOBND exists..."
 OPT=*EVENTF makei build${MAKEI_TARGET_FLAG}
 
 echo "Compile complete."
