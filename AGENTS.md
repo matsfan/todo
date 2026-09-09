@@ -41,6 +41,10 @@ the above. See `docs/plans/cicd-pipeline-plan.md` Sub-Task 5 for the full story,
 `ibmi-deploy.sh`/`ibmi-compile.sh` gained an `IBMI_IFS_DIR` variable to keep the dev and test
 IFS checkouts from clobbering each other.
 
+**This library split only isolates compiled objects, not runtime data, unless you switch
+current library too** — see the `CHGCURLIB` note under "Run" below before testing interactively
+against anything other than your session's actual current library.
+
 ## Compile Commands
 
 `scripts/ibmi-compile.sh` builds via **TOBi** (`/QOpenSys/pkgs/bin/makei build`, formerly
@@ -100,6 +104,22 @@ different automated-test strategy for Sub-Task 3.
    also beyond the truncation point. Removed one trailing space to move `+` to col 80.
 
 Run: `CALL *CURLIB/TODOMAIN`
+
+**Qualifying the `CALL` alone does not select which library's data you hit.** `TODOBL.RPGLE`
+declares `TODOPF`/`TODOLF` unqualified (`DCL-F TODOPF DISK KEYED USAGE(...) USROPN;`, no library,
+no `OVRDBF`), so at `OPEN` time they resolve via the job's `*LIBL` — specifically its
+current-library slot, a job/profile attribute independent of which library the `*PGM`/`*SRVPGM`
+objects were actually loaded from. A 5250 session's current library stays whatever the profile's
+`*CURLIB` is (e.g. `MBPRICE1`) regardless of `CALL MBPRICE2/TODOMAIN` explicitly qualifying the
+program. Confirmed 2026-09-09: adding a todo via `CALL MBPRICE2/TODOMAIN` without first switching
+current library, then running `CALL MBPRICE1/TODOMAIN`, showed the same item — the "test" run had
+silently written to `MBPRICE1/TODOPF` the whole time. **To actually exercise a given library's
+data, switch current library first:**
+```
+CHGCURLIB CURLIB(MBPRICE2)
+CALL MBPRICE2/TODOMAIN
+```
+then `CHGCURLIB CURLIB(MBPRICE1)` to go back to dev afterward.
 
 Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)`
 
