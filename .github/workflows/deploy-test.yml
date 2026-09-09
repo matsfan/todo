@@ -1,0 +1,45 @@
+name: Deploy to test library
+
+# Installs every merge to main into the MBPRICE2 test library on pub400, via
+# the same scripts/ibmi-deploy.sh + scripts/ibmi-compile.sh used for local
+# dev (see AGENTS.md / CLAUDE.md — these are the only permitted way to
+# deploy/compile against pub400). Runs against its own IFS checkout
+# (IBMI_IFS_DIR=todo-test) so it never resets/cleans the dev checkout a
+# developer or Bob's post-stop hook may be using concurrently for MBPRICE1.
+#
+# workflow_dispatch is kept alongside the push trigger so a run can be
+# retried or validated on demand without needing a new commit to main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ibmi-test-deploy
+  cancel-in-progress: false
+
+env:
+  IBMI_USER: ${{ secrets.IBMI_USER }}
+  IBMI_CURLIB: MBPRICE2
+  IBMI_IFS_DIR: todo-test
+
+jobs:
+  deploy-and-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Write CI SSH identity
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.IBMI_SSH_KEY }}" > ~/.ssh/ibmi_ci_key
+          chmod 600 ~/.ssh/ibmi_ci_key
+          echo "IBMI_IDENTITY=$HOME/.ssh/ibmi_ci_key" >> "$GITHUB_ENV"
+
+      - name: Deploy to MBPRICE2 (test library)
+        run: bash scripts/ibmi-deploy.sh "${{ github.sha }}"
+
+      - name: Compile in MBPRICE2 (test library)
+        run: bash scripts/ibmi-compile.sh

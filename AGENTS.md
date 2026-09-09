@@ -31,6 +31,16 @@ library with no extra setup. See
 [docs/plans/cicd-pipeline-plan.md](docs/plans/cicd-pipeline-plan.md) Sub-Task 2 for the full
 story of why this changed from an earlier hardcoded `TODO` library.
 
+**Three libraries, one profile**: `MBPRICE1` (dev), `MBPRICE2` (test), `MBPRICEB` (production).
+Local/interactive work (including Bob's post-stop hook, driven by `.env`'s `IBMI_CURLIB`)
+targets `MBPRICE1`. `MBPRICE2` is updated automatically on every push to `main` by
+[.github/workflows/deploy-test.yml](.github/workflows/deploy-test.yml) — never deploy or compile
+into it by hand, since a manual run would use the shared dev IFS checkout path and diverge from
+what CI last put there. `MBPRICEB` is updated manually, by separate instruction, not by either of
+the above. See `docs/plans/cicd-pipeline-plan.md` Sub-Task 5 for the full story, including why
+`ibmi-deploy.sh`/`ibmi-compile.sh` gained an `IBMI_IFS_DIR` variable to keep the dev and test
+IFS checkouts from clobbering each other.
+
 ## Compile Commands
 
 `scripts/ibmi-compile.sh` builds via **TOBi** (`/QOpenSys/pkgs/bin/makei build`, formerly

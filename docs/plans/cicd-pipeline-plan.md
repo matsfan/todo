@@ -258,18 +258,23 @@ of requiring someone to run VS Code tasks by hand.
   pub400.com (confirm this is reachable per research item 4).
 
 **Todo List**
-1. Draft the workflow YAML (good task for an AI agent — mechanical translation of the existing
-   scripts into workflow steps).
-2. Reference `IBMI_SSH_KEY` / `IBMI_USER` secrets from Sub-Task 1.
-3. Run it once manually (`workflow_dispatch`) before enabling automatic triggers, to validate
-   end-to-end without spamming pub400 on every push while iterating.
-4. Once stable, set the real trigger per the Sub-Task 5 decision.
+1. ~~Draft the workflow YAML~~ — **done**:
+   [.github/workflows/deploy-test.yml](../../.github/workflows/deploy-test.yml).
+2. ~~Reference `IBMI_SSH_KEY` / `IBMI_USER` secrets from Sub-Task 1~~ — **done**.
+3. Run it once manually (`workflow_dispatch`, which the workflow keeps alongside the `push`
+   trigger permanently for on-demand retries) before relying on the automatic `push: main`
+   trigger, to validate end-to-end without spamming pub400 on every push while iterating.
+4. ~~Set the real trigger per the Sub-Task 5 decision~~ — **done**: `push: branches: [main]`.
 
 **Relevant Context**
-- Reuses `scripts/ibmi-deploy.sh` / `scripts/ibmi-compile.sh` as-is once Sub-Task 2 makes them
-  CI-safe — the workflow itself should be a thin wrapper, not new deploy/compile logic.
+- Reuses `scripts/ibmi-deploy.sh` / `scripts/ibmi-compile.sh` as-is (only change needed was the
+  new optional `IBMI_IFS_DIR` var from Sub-Task 5 below) — the workflow itself is a thin
+  wrapper, not new deploy/compile logic.
+- `IBMI_CURLIB=MBPRICE2` and `IBMI_IFS_DIR=todo-test` are set directly in the workflow (not
+  secrets — a library name and a directory leaf aren't sensitive).
 
-**Status:** [ ] not started
+**Status:** [x] done — awaiting a live `workflow_dispatch` run against pub400 to confirm
+end-to-end before the `push: main` trigger is exercised for real (see Sub-Task 4 Todo 3).
 
 ---
 
@@ -285,19 +290,33 @@ rate-limited by a human remembering to run them).
   automated compiles/tests run against the shared pub400 `TODO` library.
 
 **Todo List**
-1. Team decision — recommended default: CI only runs full deploy+compile+test **on merge to
-   `main`**, not on every feature branch push/PR. Feature work stays on the existing manual VS
-   Code tasks (optionally to a personal library) until it's ready to merge.
-2. Document the convention.
-3. Revisit once the team has felt the actual pain (or lack of it) of the single-library model —
-   don't over-engineer per-branch isolation before it's needed.
+1. ~~Team decision~~ — **done** (2026-09-09): the pub400 profile's original single library was
+   split into three — `MBPRICE1` (dev), `MBPRICE2` (test), `MBPRICEB` (production, moved to
+   manually per a separate future decision). All local/interactive work (including Bob's
+   post-stop hook) targets `MBPRICE1`. CI runs deploy+compile **only on push to `main`**, into
+   `MBPRICE2` — matching the recommended default here — via
+   [.github/workflows/deploy-test.yml](../../.github/workflows/deploy-test.yml). Feature branches
+   stay on the existing manual local flow against `MBPRICE1`.
+2. ~~Document the convention~~ — **done**, here and in `.env`/script comments.
+3. **New follow-on found while implementing #1**: the dev-library flow and the CI test-library
+   flow both invoke `ibmi-deploy.sh`, which by default resets/`git clean`s one fixed IFS
+   directory per profile (`/home/$USER/source/todo`) — since both flows share the same pub400
+   profile, running them concurrently would let one clobber the other's checkout mid-build. Both
+   scripts now take an optional `IBMI_IFS_DIR` env var (default `todo`) so each flow gets its own
+   checkout; the CI workflow sets `IBMI_IFS_DIR=todo-test`, leaving `MBPRICE1`'s dev checkout at
+   the original `todo` path untouched.
+4. Revisit if `MBPRICE1`-vs-`MBPRICE2` still collides in practice (e.g. a long-running local
+   compile overlapping a CI run against a *shared* SSH connection limit, not the IFS path — the
+   path collision itself is now closed by #3) — don't over-engineer further before it's needed.
 
 **Relevant Context**
 - `.bob/rules-plan/AGENTS.md` already documents that `GetNextId` is a max-ID-plus-one scheme
   "acceptable for pub400.com single-user use only" — the same shared-system caution applies
   here at the CI/library level, not just inside the RPG logic.
+- Moving compiled objects from `MBPRICE2` to `MBPRICEB` (production) is intentionally **not**
+  automated — the user has said instructions for that will come later.
 
-**Status:** [ ] not started
+**Status:** [x] done
 
 ---
 
