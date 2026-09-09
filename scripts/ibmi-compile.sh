@@ -99,7 +99,18 @@ system "CRTBNDDIR BNDDIR(\$CURLIB/TODOBND)" < /dev/null
 system "ADDBNDDIRE BNDDIR(\$CURLIB/TODOBND) OBJ((\$CURLIB/TODOBL *SRVPGM *IMMED))" < /dev/null
 
 echo "Re-running build now that TODOBND exists..."
-OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null
+OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null || true
+
+# Even with TODOBND in place, TODOMAIN.PGM still fails to bind: makei's own
+# generated CRTBNDRPG command never includes a BNDDIR() parameter at all (see
+# it above -- TGTCCSID/DBGVIEW/OPTION/etc are all there, BNDDIR just isn't),
+# so it can never resolve TODOBL's exported procedures no matter how correct
+# TODOBND itself is. Bind it explicitly here instead, as the authoritative
+# last step -- this always runs (not just on failure) so TODOMAIN.PGM can't
+# silently drift from a stale prior build.
+echo "Binding TODOMAIN against TODOBND..."
+system "DLTPGM PGM(\$CURLIB/TODOMAIN)" < /dev/null 2>&1 || true
+system "CRTBNDRPG PGM(\$CURLIB/TODOMAIN) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOMAIN.RPGLE') TGTCCSID(*JOB) DBGVIEW(*ALL) DBGENCKEY(*NONE) USRPRF(*USER) OPTION(*EVENTF) BNDDIR(\$CURLIB/TODOBND)" < /dev/null
 
 echo "Compile complete."
 SCRIPT
