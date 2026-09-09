@@ -4,8 +4,13 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Credentials — sourced from .env at the repo root (git-ignored).
 # Required variables: IBMI_USER, IBMI_IDENTITY, IBMI_CURLIB
-# Optional variable:  IBMI_SSH_PORT (default: 2222)
+# Optional variables: IBMI_SSH_PORT (default: 2222), IBMI_IFS_DIR (default: todo)
 # See .env.example for the format.
+#
+# IBMI_IFS_DIR must match whatever ibmi-deploy.sh was given for this same
+# build — it's what points the compile at the right IFS checkout when a
+# profile has more than one (e.g. a dev checkout vs. an automated
+# test-library pipeline's own checkout).
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/../.env"
@@ -18,7 +23,8 @@ USER="${IBMI_USER:?'.env must set IBMI_USER'}"
 IDENTITY="${IBMI_IDENTITY:?'.env must set IBMI_IDENTITY'}"
 CURLIB="${IBMI_CURLIB:?'.env must set IBMI_CURLIB'}"
 TARGET="${1:-all}"
-IFS_ROOT="/home/$USER/source/todo"
+IFS_DIR="${IBMI_IFS_DIR:-todo}"
+IFS_ROOT="/home/$USER/source/${IFS_DIR}"
 PORT="${IBMI_SSH_PORT:-2222}"
 
 SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
