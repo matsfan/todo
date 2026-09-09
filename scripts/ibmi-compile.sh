@@ -73,7 +73,10 @@ echo "Building into library \$CURLIB (target: ${TARGET})"
 # first pass is allowed to fail -- it still builds everything TOBi *can*
 # handle (DSPF/PF/LF/MODULE) -- and the second pass is what actually
 # determines success once TODOBL/TODOBND exist.
-OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} || true
+#
+# < /dev/null here too: makei itself reads stdin, which -- same as the CL
+# calls below -- would otherwise swallow the rest of this remote script.
+OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null || true
 
 # TOBi references MODULE_TO_BND_RECIPE / BND_TO_BNDDIR_RECIPE for building a
 # *SRVPGM from binder source and a *BNDDIR from a *SRVPGM, but neither macro
@@ -96,7 +99,7 @@ system "CRTBNDDIR BNDDIR(\$CURLIB/TODOBND)" < /dev/null
 system "ADDBNDDIRE BNDDIR(\$CURLIB/TODOBND) OBJ((\$CURLIB/TODOBL *SRVPGM *IMMED))" < /dev/null
 
 echo "Re-running build now that TODOBND exists..."
-OPT=*EVENTF makei build${MAKEI_TARGET_FLAG}
+OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null
 
 echo "Compile complete."
 SCRIPT
