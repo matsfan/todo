@@ -140,6 +140,19 @@ CRTBNDRPG PGM(TODO/TODOMAIN) SRCFILE(TODO/QRPGLESRC) SRCMBR(TODOMAIN)
 CALL TODO/TODOMAIN
 ```
 
+> **Qualifying `CALL` with a library does not select which library's data you hit.**
+> `TODOBL.RPGLE` declares `TODOPF`/`TODOLF` unqualified, with no `OVRDBF`, so they resolve via
+> the job's `*LIBL` — specifically its current-library slot, a job/profile attribute independent
+> of which library the `*PGM`/`*SRVPGM` objects were actually loaded from. If your profile is set
+> up with more than one library for this app (e.g. `MBPRICE1` for dev, `MBPRICE2` for test), a
+> qualified `CALL MBPRICE2/TODOMAIN` still reads/writes whichever library is your session's
+> *actual* current library, not `MBPRICE2`, unless you switch it first:
+> ```
+> CHGCURLIB CURLIB(MBPRICE2)
+> CALL MBPRICE2/TODOMAIN
+> ```
+> then `CHGCURLIB CURLIB(MBPRICE1)` (or whichever is your normal dev library) afterward.
+
 You should see the Todo List screen. Use:
 
 | Key / Option | Action |
