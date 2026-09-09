@@ -58,15 +58,55 @@ CRTSRVPGM SRVPGM(*CURLIB/TODOTEST) MODULE(*CURLIB/TODOTEST) SRCSTMF('.../QBNDSRC
 rule for building a `*SRVPGM` straight from a module the way plain `CRTSRVPGM ... MODULE(...)`
 (implicit `EXPORT(*ALL)`) does, so each service program's exports are now declared explicitly
 via `STRPGMEXP`/`EXPORT SYMBOL`/`ENDPGMEXP`, matching the `EXPORT`-flagged procedures already in
-`TODOBL.RPGLE`/`TODOTEST.RPGLE`. **Flagged for RPG-teammate review before this runs unattended in
-CI** (per Sub-Task 9's existing convention): the `TODOTEST.SRVPGM` rule in `QBNDSRC/Rules.mk`
-reaches `RPGUNIT/RUCRTTST` via a `| /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM` order-only
-prerequisite — this is TOBi's documented mechanism for binding to a service program in another
-library, but it hasn't been exercised against a real `makei build` run on pub400 yet.
+`TODOBL.RPGLE`/`TODOTEST.RPGLE`.
+
+**RPGUnit is not installed on pub400 (confirmed 2026-09-08)** — the `RPGUNIT` library does not
+exist anywhere on this profile (`DSPOBJD OBJ(*ALL/RPGUNIT) OBJTYPE(*LIB)` → object not found), and
+it isn't available via `yum`/PASE packages either. Since `iproj.json`'s `preUsrlibl` used to list
+`RPGUNIT` unconditionally, this was blocking **every** RPG compile, not just `TODOTEST` — the
+`ADDLIBLE` step failing aborted `TODOBL`/`TODOMAIN` too. `preUsrlibl` has been cleared so the main
+app builds; `TODOTEST.RPGLE` still can't compile (it needs `/COPY RPGUNIT/QINCLUDE,TESTCASE` at
+compile time, not just bind time) and `QBNDSRC/Rules.mk`'s `TODOTEST.SRVPGM` rule still can't
+resolve its `| /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM` order-only prerequisite. This is a real
+decision point for the team, not a bug to silently work around further: either get RPGUnit
+installed on pub400 (likely needs a pub400 admin, or restoring your own SAVF into a personal
+library and adjusting the `BNDSRVPGM(RPGUNIT/RUCRTTST)` reference accordingly), or pick a
+different automated-test strategy for Sub-Task 3.
+
+**`TODODSPPF.DSPF` had six DDS bugs fixed (2026-09-08):**
+1. Two date fields (`TDDUE`, `DETDUE`, `DELDUE`) had `L` in the length column (34) instead of
+   the type column (35) — an off-by-one column shift.
+2. The `*IN60` conditioning indicator on the TODODET error message was in the keyword area
+   (cols 40–41) instead of the field condition columns (cols 7–16).
+3. A `+` continuation line in TODODET's instruction constant started one column too far right
+   (col 50 instead of 49).
+4. All three numeric ID fields (`TDID`, `DETID`, `DELID`) were declared with type `P` (packed
+   decimal) — not valid in a DSPF. Changed to `S` (zoned decimal); RPG handles the packed↔zoned
+   conversion automatically and `EDTCDE(Z)` continues to suppress leading zeros on output.
+5. The Description column-heading underline constant (TODOCTL) was 101 characters — the closing
+   `'` was beyond the 80-col `CPYFRMSTMF` truncation point, leaving an unterminated string that
+   cascaded `CPD7484` errors across the rest of the file. Shortened to fit within 80 cols.
+6. The `+` continuation on the TODODET blank-description error message had the `+` at col 81,
+   also beyond the truncation point. Removed one trailing space to move `+` to col 80.
 
 Run: `CALL *CURLIB/TODOMAIN`
 
 Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)`
+
+## Deploy & Compile
+
+`scripts/ibmi-deploy.sh` and `scripts/ibmi-compile.sh` are the **only** permitted way to deploy
+and compile against pub400.com. Never hand-craft `scp` calls or `CRT*` commands directly.
+
+Credentials are read from a `.env` file at the repo root (git-ignored — never commit it). See
+`.env.example` for the required variables: `IBMI_USER`, `IBMI_IDENTITY`, and `IBMI_CURLIB` (the
+profile's pre-provisioned current library — fixed per pub400 profile, not auto-detected, since
+non-interactive SSH jobs have no reliable way to look it up: screen-oriented Display commands
+like `DSPUSRPRF` kill the SSH session outright when run without a pty).
+
+Bob runs these scripts automatically via a `Stop` hook (`.bob/hooks/ibmi-post-stop.sh`) after
+finishing implementation work. Build output is appended to `.bob/logs/ibmi-build.log`. The hook
+deploys the currently checked-out local branch.
 
 ## Architecture
 
@@ -80,8 +120,11 @@ This split allows `TODOBL` to be bound by the RPGUnit test suite (`TODOTEST`) in
 ## Critical Conventions
 
 - **All RPG is fully free-form** (`**FREE` at line 1, no column restrictions).
+- **`CTL-OPT NOMAIN`** is required on `TODOBL.RPGLE` (it's a `*SRVPGM` module, no program entry point). **`CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW)`** is required on `TODOMAIN.RPGLE` (it calls a `*SRVPGM` — default activation group cannot bind service programs).
 - **`USROPN`** on file declarations in `TODOBL` — files are opened/closed explicitly via `OpenFiles`/`CloseFiles`, not automatically by the program cycle. `TODOMAIN` declares only `TODODSPPF`.
 - **`TODOPF` is opened for `*UPDATE:*OUTPUT:*DELETE`**; `TODOLF` is opened read-only. Never write/update/delete through the logical file.
+- **`TODOLF` is declared with `RENAME(TODOR:TODOLFR)`** — `TODOLF`'s DDS reuses `TODOPF`'s record format name (`TODOR`). RPG won't allow two open files with the same external format name, so reads against `TODOLF` use the renamed format `TODOLFR` (e.g. `READ TODOLFR`, `READP TODOLFR`), while writes/updates/deletes against `TODOPF` use `TODOR` directly.
+- **Block-closing keywords are `ENDIF`/`ENDDO`/`ENDSL` — no hyphen.** Only structured-definition closers take a hyphen: `END-PI`, `END-PR`, `END-DS`, `END-PROC`. Using `END-IF`/`END-DO` is a compile error in fully free-form RPG.
 - **Subfile clear sequence is order-sensitive**: set `*IN52=*ON`, `WRITE TODOCTL`, then immediately `*IN52=*OFF` before writing any rows.
 - **`*IN50` (SFLDSP) must stay `*OFF` when the subfile has zero rows** — displaying an empty subfile causes a runtime error.
 - **`CHAIN` uses `TODOPF` (not `TODOLF`) for all updates, deletes, and mark-done** — positioning on the logical file is only for sequential reads.

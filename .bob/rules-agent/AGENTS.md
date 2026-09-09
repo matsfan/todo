@@ -8,3 +8,4 @@
 - `w_Found` is always assigned as `NOT %EOF(...)` immediately after `CHAIN` — do not introduce `%FOUND` checks; the pattern would be inconsistent.
 - DDS source uses fixed-column layout — never run a general code formatter on `.PF`, `.LF`, `.DSPF` files; columns 1–80 are significant.
 - The target library is `*CURLIB`, not a hardcoded name — used in `PFILE(*CURLIB/TODOPF)` inside `QDDSSRC/TODOLF.LF` and in every compile command, since pub400.com doesn't allow arbitrary library creation and each profile has its own pre-provisioned current library.
+- After finishing implementation work, deploy and compile are handled automatically by the `Stop` hook (`.bob/hooks/ibmi-post-stop.sh`). Do not hand-craft `CRT*` commands or `scp` calls. If you need to trigger deploy+compile manually mid-session, run `bash .bob/hooks/ibmi-post-stop.sh` directly.

@@ -197,18 +197,14 @@ auth regardless of this change.
 
 **Relevant Context**
 - [scripts/ibmi-deploy.sh](../../scripts/ibmi-deploy.sh) — now git-based; confirmed working
-  end-to-end against pub400.
-- [scripts/ibmi-compile.sh:16-18](../../scripts/ibmi-compile.sh) — the `chk_del` function,
-  intentionally left as-is pending item 5's review; SSH-option changes to this script itself
-  still need their own live test run.
-- This script already deletes and recompiles every object on every run (documented in
-  [deploy-scripts-plan.md](../../deploy-scripts-plan.md)) — fine for 3 objects today; revisit if
-  Sub-Task 7 (Bob) is adopted later.
+  end-to-end against pub400 (2026-09-08 live run, in addition to the earlier confirmation above).
+- Item 5's `chk_del` concern is now moot — Sub-Task 7 replaced `ibmi-compile.sh`'s entire
+  CL/`chk_del` sequence with `makei build`, which does its own dependency-aware rebuild instead.
 - Side benefit worth calling out to the team: because the IFS copy is now a real git checkout,
   "roll back a bad deploy" becomes `git checkout <previous-good-sha>` + recompile, rather than
   needing a separate `SAVLIB`/`RSTLIB` snapshot strategy.
 
-**Status:** [ ] not started
+**Status:** [x] done — deploy script verified working end-to-end against pub400
 
 ---
 
@@ -339,43 +335,64 @@ as "optional / future" pending a concrete pain point — the team decided to swi
   `Rules.mk` / `iproj.json`.
 
 **Todo List**
-1. ~~Confirm `/QOpenSys/pkgs/bin/makei` is present and working on pub400~~ — **not yet verified
-   live**; it's referenced in [`.vscode/actions.json:106,119`](../../.vscode/actions.json), which
-   is the only prior evidence it's available on this profile.
+1. ~~Confirm `/QOpenSys/pkgs/bin/makei` is present and working on pub400~~ — **confirmed live
+   2026-09-08**: `TOBi version 3.2.1`.
 2. ~~Add `iproj.json` and `Rules.mk` (root + `QDDSSRC/`, `QRPGLESRC/`, new `QBNDSRC/`)~~ —
    **drafted**, mirroring the exact dependency order documented in `AGENTS.md`. Required adding
    binder source (`QBNDSRC/TODOBL.BND`, `QBNDSRC/TODOTEST.BND`) since TOBi has no rule for
    building a `*SRVPGM` straight from a module — see `AGENTS.md`'s Compile Commands section for
    why.
 3. ~~Rewrite `ibmi-compile.sh` to call `makei build` instead of the `CRT*`/`chk_del` sequence~~ —
-   **drafted**. This also retires the `chk_del` helper flagged in Sub-Task 2 item 5 — TOBi does
-   its own dependency-aware rebuild instead of deleting and recreating every object every run.
-4. **Not yet done — prototype `makei build` against pub400 and compare output/behavior to the
-   old script**, i.e. what this sub-task originally asked for before adopting. In particular:
-   - Confirm `makei` picks up `BUILDLIB=*CURLIB` the same way the existing
-     `.vscode/actions.json` "Build all with TOBi" action does.
-   - Confirm the `TODOTEST.SRVPGM` rule's `| /QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM` order-only
-     prerequisite actually resolves `BNDSRVPGM(RPGUNIT/RUCRTTST)` the way the old explicit CL
-     command did (flagged in `AGENTS.md` for RPG-teammate review, same as Sub-Task 9).
-   - Confirm the binder source symbol case in `QBNDSRC/TODOTEST.BND` doesn't break RPGUnit's
-     "test"-prefix discovery.
-   - Compare a job log from a `makei build` run against the old script's `DSPJOBLOG` output for
-     the same object (`TGTCCSID`/`DBGVIEW`/`OPTION` — TOBi's own defaults were used as-is rather
-     than overridden, on the understanding that TOBi auto-detects IFS source CCSID; this needs a
-     real run to confirm it lands on `*JOB` semantics like the old script's explicit
-     `TGTCCSID(*JOB)`).
-5. Once 4 passes, this can be treated as done rather than a draft awaiting review.
+   **drafted, then fixed 2026-09-08**: the script passed the literal string `BUILDLIB=*CURLIB`,
+   but `makei` needs a real env var named `CURLIB` set to an actual library name (`iproj.json`'s
+   `&CURLIB` placeholder resolves from that var, not a CL special value) — it errored out
+   immediately with "CURLIB must be defined first in the environment variable" every time. Fixed
+   to look up the profile's real current library via `DSPUSRPRF` and export that.
+4. ~~Prototype `makei build` against pub400 and compare output/behavior to the old script~~ —
+   **done 2026-09-08, with real findings**:
+   - `BUILDLIB=*CURLIB` was wrong as noted above — the actual mechanism is the `CURLIB` env var.
+   - The `TODOTEST.SRVPGM` rule's `RPGUNIT/RUCRTTST` dependency **cannot resolve — confirmed the
+     `RPGUNIT` library does not exist anywhere on this pub400 profile** (research item 3 from the
+     top of this doc is now answered, and answered negatively). Worse, `iproj.json`'s
+     `preUsrlibl: ["RPGUNIT"]` was blocking **every** RPG compile, not just `TODOTEST` — cleared
+     it so `TODOBL`/`TODOMAIN` can build; `TODOTEST` stays blocked pending a Sub-Task 3 strategy
+     decision. See `AGENTS.md`'s new RPGUnit note for detail.
+   - Along the way, live compiles surfaced that **none of this RPG/DDS source had ever actually
+     compiled successfully before** (the compile scripts were drafted and never fully live-run
+     until now). Real, independent bugs found and fixed: two DDS bugs in `TODOPF.PF` (a
+     `TEXT()` literal overflowing the 80-column line limit; a date field's type code one column
+     off), a duplicate DDS record-format name between `TODOPF`/`TODOLF` needing a `RENAME` in
+     `TODOBL.RPGLE`, several I/O ops in `TODOBL.RPGLE` using fixed-form-style operand lists
+     invalid in `**FREE`, `READPE` used where `READP` was needed, every `END-IF`/`END-DO` in
+     `TODOBL.RPGLE`/`TODOMAIN.RPGLE` written with a hyphen (invalid — only `END-PROC`/`END-DS`
+     etc. take the hyphen; block-closers are `ENDIF`/`ENDDO`), a missing `CTL-OPT NOMAIN` on
+     `TODOBL.RPGLE`, a missing `CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW)` on `TODOMAIN.RPGLE`, and
+     `TODOMAIN.RPGLE`'s `Main();` entry-point call positioned after all subprocedures (RPG
+     silently ignores mainline code placed there). `TODOBL.SRVPGM` now compiles clean end to end.
+   - `TODODSPPF.DSPF`: 3 of its 4 record formats (`TODOSFL`, `TODOCTL`, `TODODET`) now compile
+     clean after fixing a continuation-line column bug, two more date-field column bugs, and an
+     indicator placed in the wrong condition columns. The 4th, `TODODEL`, has an unresolved
+     compile bug blocking the whole file (and therefore `TODOMAIN.PGM`, since it's a `WORKSTN`
+     file) — **flagged in `AGENTS.md` for RPG/DDS-teammate review**, not yet root-caused despite
+     extensive live A/B testing against the real compiler.
+   - Compiler-option comparison (`TGTCCSID`/`DBGVIEW`/`OPTION`) not separately verified — TOBi's
+     own defaults were used as-is and nothing so far suggests a CCSID/encoding problem, but this
+     wasn't specifically checked line-by-line against the old script's explicit options.
+5. This can move to "done" once `TODODEL` is fixed and a full `makei build` succeeds end to end —
+   everything else in this item has been verified against a real run, not just drafted.
 
 **Relevant Context**
 - [github.com/IBM/sourceorbit](https://github.com/IBM/sourceorbit) pairs with TOBi for
   dependency discovery — not adopted here since `Rules.mk` was written by hand for this small a
   program; revisit if the object count grows enough to make that tedious.
-- This was drafted by an AI agent with no way to SSH into pub400 and run `makei build` — treat
-  the `Rules.mk`/binder-source/`ibmi-compile.sh` changes as exactly the kind of agent-authored
-  CL/build change this plan's intro asks an RPG-experienced teammate to review before CI relies
-  on them unattended.
+- The `Rules.mk`/binder-source/`ibmi-compile.sh`/RPG source changes here have now been verified
+  against live `makei build` runs on pub400 (not just agent-drafted) — but per this plan's intro,
+  still treat the RPG/DDS-specific fixes (the `RENAME`, the free-form operand changes, the DDS
+  column fixes) as a draft for RPG-teammate review before CI relies on them unattended, and see
+  `AGENTS.md` for the specific items flagged.
 
-**Status:** [~] drafted, not yet verified against pub400
+**Status:** [~] `TODOBL`/`TODOPF`/`TODOLF` verified working end to end; `TODODSPPF.DSPF`'s
+`TODODEL` record format still blocks a full build — see `AGENTS.md` for the write-up.
 
 ---
 

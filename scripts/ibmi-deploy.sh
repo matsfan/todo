@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ -z "${1:-}" ]; then
-  echo "Usage: $0 <pub400.com username> [git-ref] [ssh-identity-file]" >&2
-  echo "  git-ref            branch, tag, or commit SHA to deploy (default: main)" >&2
-  echo "  ssh-identity-file  path to a private key (default: use ssh-agent/default keys)" >&2
-  exit 1
+# ---------------------------------------------------------------------------
+# Credentials — sourced from .env at the repo root (git-ignored).
+# Required variables: IBMI_USER, IBMI_IDENTITY
+# Optional variable:  IBMI_SSH_PORT (default: 2222)
+# See .env.example for the format.
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../.env"
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
 fi
 
-USER="$1"
-REF="${2:-main}"
-IDENTITY="${3:-}"
+USER="${IBMI_USER:?'.env must set IBMI_USER'}"
+IDENTITY="${IBMI_IDENTITY:?'.env must set IBMI_IDENTITY'}"
+REF="${1:-main}"
 IFS_ROOT="/home/$USER/source/todo"
 REPO_URL="https://github.com/matsfan/todo.git"
 PORT="${IBMI_SSH_PORT:-2222}"
 
-SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new)
-if [ -n "$IDENTITY" ]; then
-  SSH_OPTS+=(-i "$IDENTITY")
-fi
+SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
 
 # Pulls source directly from GitHub on pub400 itself (git is available at
 # /QOpenSys/pkgs/bin/git there) instead of scp-ing local files. This means what
@@ -28,7 +31,7 @@ fi
 # NOTE: git clean -fdx wipes anything not tracked/committed in $IFS_ROOT on pub400.
 # Don't use this directory as a scratch space for ad-hoc edits between deploys.
 ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" <<ENDSSH
-set -e
+set -euo pipefail
 
 # Non-interactive SSH sessions don't always source .profile/.bashrc, so PATH may
 # not include the Open Source package dir where git actually lives — set it

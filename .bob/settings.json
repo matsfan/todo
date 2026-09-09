@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .bob/hooks/ibmi-post-stop.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
