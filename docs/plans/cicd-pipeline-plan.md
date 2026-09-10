@@ -11,7 +11,8 @@ tooling — no Eradani, ARCAD, or similar commercial IBM i DevOps suite.
   physical file members — the hard "get RPG into git" problem is already solved.
 - The program is already split into a testable architecture: `TODOBL` (`*SRVPGM`, all file I/O
   and business logic) + `TODOMAIN` (thin UI shell) + `TODOTEST` (RPGUnit suite), per
-  [rpgunit-testable-plan.md](../rpgunit-testable-plan.md).
+  [rpgunit-testable-plan.md](archive/rpgunit-testable-plan.md) (archived — the split it designed
+  is the current architecture; see [AGENTS.md](../../AGENTS.md)).
 - `scripts/ibmi-deploy.sh` (scp source to the IFS) and `scripts/ibmi-compile.sh` (SSH + ordered
   `CRT*` commands) already exist and work, wired into `.vscode/tasks.json`.
 - `docs/DEPLOY.md` documents the manual first-time setup on pub400.com.
@@ -211,14 +212,16 @@ auth regardless of this change.
 ### Sub-Task 3 — Machine-readable RPGUnit results
 
 **Intent**
-Give CI an actual pass/fail signal from the test suite, not just streamed terminal output. Today
-this only exists as the manual **"IBM i: Run Tests"** VS Code task
-([`.vscode/tasks.json:34-43`](../../.vscode/tasks.json)), which isn't wired into either compile
-script at all.
+Give CI an actual pass/fail signal from the test suite, not just streamed terminal output. There
+is no manual path either: a **"IBM i: Run Tests"** VS Code task used to exist in
+[`.vscode/tasks.json`](../../.vscode/tasks.json), but it was removed on 2026-09-10 — it
+hand-crafted an ad hoc `ssh` call (which the project rule in [AGENTS.md](../../AGENTS.md)
+forbids as a substitute for the scripts) and could never run anyway while RPGUnit is absent.
+Reviving test execution means adding a real target to the compile script, not restoring that task.
 
 **Expected Outcomes**
 - A new `scripts/ibmi-test.sh` (or an added stage in `ibmi-compile.sh`) runs
-  `RUCALLTST TSTPGM(TODO/TODOTEST)` and exits non-zero if any test fails.
+  `RUCALLTST TSTPGM(*CURLIB/TODOTEST)` and exits non-zero if any test fails.
 - Failure output is captured somewhere CI can surface it (job log excerpt, spooled file
   contents, or an XML/CSV report — whichever research item 3 turns up as supported).
 
@@ -233,10 +236,14 @@ script at all.
 
 **Relevant Context**
 - [`.vscode/tasks.json:34-43`](../../.vscode/tasks.json) — current manual test invocation.
-- [docs/rpgunit-testable-plan.md](../rpgunit-testable-plan.md) — background on the `TODOTEST`
-  suite and its 7 test procedures.
+- [docs/plans/archive/rpgunit-testable-plan.md](archive/rpgunit-testable-plan.md) — background on
+  the `TODOTEST` suite and its test procedures (archived; the split it designed is current, the
+  test list itself is slightly stale — see that file's archive banner).
 
-**Status:** [ ] not started
+**Status:** [ ] not started — and currently blocked: RPGUnit is not installed on this pub400
+profile (confirmed 2026-09-08), so there is no `RUCALLTST` output to make machine-readable yet.
+See [AGENTS.md](../../AGENTS.md)'s RPGUnit note for the detail; this sub-task can't meaningfully
+start until that's resolved.
 
 ---
 
@@ -273,8 +280,9 @@ of requiring someone to run VS Code tasks by hand.
 - `IBMI_CURLIB=MBPRICE2` and `IBMI_IFS_DIR=todo-test` are set directly in the workflow (not
   secrets — a library name and a directory leaf aren't sensitive).
 
-**Status:** [x] done — awaiting a live `workflow_dispatch` run against pub400 to confirm
-end-to-end before the `push: main` trigger is exercised for real (see Sub-Task 4 Todo 3).
+**Status:** [x] done — confirmed working end-to-end. An explicit `workflow_dispatch` run
+succeeded against pub400 on 2026-09-09, and the `push: main` trigger has now run successfully on
+every merge to `main` through 2026-09-10 (10+ green runs total).
 
 ---
 
@@ -410,8 +418,16 @@ as "optional / future" pending a concrete pain point — the team decided to swi
   column fixes) as a draft for RPG-teammate review before CI relies on them unattended, and see
   `AGENTS.md` for the specific items flagged.
 
-**Status:** [~] `TODOBL`/`TODOPF`/`TODOLF` verified working end to end; `TODODSPPF.DSPF`'s
-`TODODEL` record format still blocks a full build — see `AGENTS.md` for the write-up.
+**Status:** [x] done — the full build now succeeds end to end: `TODOPF`, `TODOLF`, `TODODSPPF`
+(including `TODODEL`, which was root-caused and fixed), `TODOBL.SRVPGM`, `TODOBND.BNDDIR`, and
+`TODOMAIN.PGM` all build via `scripts/ibmi-compile.sh`. Two caveats carried forward rather than
+fully closed out: (1) `makei build` itself still cannot produce a `*SRVPGM` from binder source or
+a `*BNDDIR` on this pub400 install, so the compile script does the `CRTSRVPGM`/`CRTBNDDIR`/
+`ADDBNDDIRE`/explicit-bind steps itself around two `makei build` passes, rather than TOBi's
+`Rules.mk` doing all of it — see [AGENTS.md](../../AGENTS.md) for the mechanics and why. (2)
+`TODOTEST.MODULE`/`TODOTEST.SRVPGM` remain blocked, not by a build-script gap but because RPGUnit
+is not installed on this pub400 profile (see Sub-Task 3 above) — not a priority to fix per
+`CLAUDE.md`/`AGENTS.md`.
 
 ---
 

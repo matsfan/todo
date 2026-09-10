@@ -2,9 +2,8 @@
 //***************************************************************************
 // TODOTEST - RPGUnit test suite for TODOBL service program
 //
-// Every procedure whose name starts with 'test' is automatically discovered
-// and executed by the RPGUnit runner:
-//   RUCALLTST TSTPGM(TODO/TODOTEST)
+// Every procedure whose name starts with 'test' is discovered and run by
+// the RPGUnit runner: RUCALLTST TSTPGM(*CURLIB/TODOTEST)
 //
 // setUp is called before each test; tearDown is called after each test.
 //
@@ -14,10 +13,9 @@
 //   8001  - testAddTodoRecord
 //   8002  - testMarkDoneRecord
 //
-// Compile commands:
-//   CRTPGM    MODULE(TODO/TODOTEST)  SRCFILE(TODO/QRPGLESRC)  SRCMBR(TODOTEST)
-//   CRTSRVPGM SRVPGM(TODO/TODOTEST) MODULE(TODO/TODOTEST)
-//             BNDDIR(TODO/TODOBND) BNDSRVPGM(RPGUNIT/RUCRTTST)
+// NOTE: cannot currently build — RPGUnit is not installed on pub400 (no
+// RPGUNIT library; see CLAUDE.md "Known limitation"). Otherwise built by
+// scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build order.
 //***************************************************************************
 
 /COPY RPGUNIT/QINCLUDE,TESTCASE

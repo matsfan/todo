@@ -25,20 +25,21 @@ files elsewhere. On IBM i, almost nothing is a plain file:
 
 | .NET world | IBM i world |
 |---|---|
-| Folder | **Library** (e.g. `TODO`) |
-| `.cs`, `.sql` files on disk | **Source physical file member** — a "file" that is really a database table of source lines, living inside a library |
-| Solution/project structure | This repo's `QRPGLESRC/` and `QDDSSRC/` folders are a *local mirror* of two source files, `TODO/QRPGLESRC` and `TODO/QDDSSRC`, that actually live on the IBM i server |
+| Folder | **Library** (e.g. `MBPRICE1`, this project's dev library) |
+| `.cs`, `.sql` files on disk | **Source physical file member** — a "file" that is really a database table of source lines, living inside a library. *This project doesn't use any* — see the next row. |
+| Solution/project structure | This repo's `QRPGLESRC/` and `QDDSSRC/` folders **are** the source of truth, not a mirror of anything. There is no source physical file anywhere in this project — no `CRTSRCPF`, no member uploads, no SEU/RDi editing a server-side copy. `scripts/ibmi-deploy.sh` has pub400 itself `git clone`/`git pull` this exact repo onto its IFS (the Unix-style filesystem every IBM i also has), and compile commands read straight from those files there via `SRCSTMF` ("source stream file"), never `SRCFILE`/`SRCMBR`. That's arguably a closer fit to .NET habits than classic IBM i development is — it's `git push` + a CI-ish checkout, not "the server holds the real copy and your laptop holds a mirror." |
 | `.dll` / `.exe` | **`*PGM`** (program object) or **`*SRVPGM`** (service program object) |
 | `dotnet build` | A `CRT*` ("Create") CL command — `CRTPF`, `CRTDSPF`, `CRTSRVPGM`, `CRTBNDRPG`, etc. |
-| `dotnet run` | `CALL TODO/TODOMAIN` |
+| `dotnet run` | `CALL *CURLIB/TODOMAIN` |
 
 There's no `dotnet build` equivalent that "just knows what to do" — you compile
 each object explicitly, in dependency order, with named CL commands. See
-[`AGENTS.md`](../AGENTS.md#compile-commands-must-run-in-this-exact-order) for
-this project's exact sequence — notice the table has to exist before the
-logical file, which has to exist before the service program, which has to
-exist before the binding directory is populated, which has to exist before the
-main program compiles. That ordering is load-bearing, not stylistic.
+[`AGENTS.md`](../AGENTS.md#compile-commands) for this project's exact
+sequence — notice the table has to exist before the logical file, which has to
+exist before the service program, which has to exist before the binding
+directory is populated, which has to exist before the main program compiles.
+That ordering is load-bearing, not stylistic. In practice you don't run any of
+this by hand, either — see §6.
 
 The five-character member names (`TODOPF`, `TODOBL`, `TODOMAIN`...) aren't a
 style choice either — they're a hard OS limit on object names, which is why
@@ -112,9 +113,13 @@ There's no separate `CREATE TABLE` vs `CREATE UNIQUE INDEX` step conceptually
 [`QDDSSRC/TODOLF.LF`](../QDDSSRC/TODOLF.LF) is a **logical file**:
 
 ```
-A          R TODOR                     PFILE(TODO/TODOPF)
+A          R TODOR                     PFILE(*CURLIB/TODOPF)
 A          K TDID
 ```
+
+(`*CURLIB` rather than a hardcoded library name for the same reason the
+compile commands in §6 use it — see [`QDDSSRC/TODOLF.LF`](../QDDSSRC/TODOLF.LF)
+for the real source.)
 
 A logical file is IBM i's version of a database **view/index** — it doesn't
 store its own data, it's a keyed (or select/omit-filtered) window onto a
@@ -127,12 +132,18 @@ larger app you'd see logical files that:
 - join multiple physical files, or expose only some columns
 
 The RPG code opens `TODOLF` for **sequential reads** and `TODOPF` for
-**writes/updates/deletes** — see [`TODOBL.RPGLE:34-38`](../QRPGLESRC/TODOBL.RPGLE):
+**writes/updates/deletes** — see [`TODOBL.RPGLE:39-42`](../QRPGLESRC/TODOBL.RPGLE):
 
 ```rpgle
-DCL-F TODOLF    DISK    KEYED USROPN;
+DCL-F TODOLF    DISK    KEYED USROPN RENAME(TODOR:TODOLFR);
 DCL-F TODOPF    DISK    KEYED USAGE(*UPDATE:*OUTPUT:*DELETE) USROPN;
 ```
+
+(`RENAME(TODOR:TODOLFR)` is there because `TODOLF`'s DDS reuses `TODOPF`'s
+record format name `TODOR` — RPG won't allow two files open in the same
+program to expose the same external record-format name, so reads against
+`TODOLF` go through the renamed format `TODOLFR` instead, e.g. `READ
+TODOLFR;`. You'll see that in the verb table below.)
 
 That's a deliberate convention in this codebase (documented in
 [`AGENTS.md`](../AGENTS.md#critical-conventions)): read through the logical
@@ -154,15 +165,22 @@ for positioning. From [`TODOBL.RPGLE`](../QRPGLESRC/TODOBL.RPGLE):
 
 | RPG verb | What it does | Closest .NET analogy |
 |---|---|---|
-| `CHAIN i_Id TODOPF TODOR` | Random-access read by key — "get the row where `TDID = i_Id`" | `dbSet.Find(id)` / `SELECT * WHERE TdId = @id` |
-| `READ TODOLF TODOR` | Read the *next* record sequentially from wherever the file is currently positioned | `IEnumerator.MoveNext()` on an ordered query |
+| `CHAIN i_Id TODOPF` | Random-access read by key — "get the row where `TDID = i_Id`" | `dbSet.Find(id)` / `SELECT * WHERE TdId = @id` |
+| `READ TODOLFR` | Read the *next* record sequentially from wherever `TODOLF` is currently positioned (`TODOLFR` is `TODOLF`'s renamed record format — see §3) | `IEnumerator.MoveNext()` on an ordered query |
 | `SETLL *START TODOLF` | Position the file cursor *before* the first record, without reading anything | Resetting an enumerator / `OFFSET 0` |
-| `SETLL *END TODOLF` | Position after the last record | Positioning at the end, used with `READPE` (read prior) to find the highest key |
-| `READPE TODOR TODOLF` | Read the *previous* record | `MoveNext()` in reverse |
-| `WRITE TODOR TODOPF` | Insert a new row | `INSERT` / `dbSet.Add(x); SaveChanges()` |
-| `UPDATE TODOR TODOPF` | Update the row currently loaded into the record buffer | `UPDATE` / `SaveChanges()` after mutating a tracked entity |
-| `DELETE TODOR TODOPF` | Delete the row currently loaded/chained | `DELETE` / `dbSet.Remove(x)` |
+| `SETLL *END TODOLF` | Position after the last record | Positioning at the end, used with `READP` (read prior) to find the highest key |
+| `READP TODOLFR` | Read the *previous* record, unconditionally (no key to match) | `MoveNext()` in reverse |
+| `WRITE TODOR` | Insert a new row into `TODOPF` (the only file `TODOR` is unambiguous for, now that `TODOLF`'s copy of the format is renamed) | `INSERT` / `dbSet.Add(x); SaveChanges()` |
+| `UPDATE TODOR` | Update the row currently loaded into the record buffer | `UPDATE` / `SaveChanges()` after mutating a tracked entity |
+| `DELETE TODOR` | Delete the row currently loaded/chained | `DELETE` / `dbSet.Remove(x)` |
 | `%EOF(file)` | "Did the last operation fail to find/read a record?" | `reader.Read() == false`, or a null check after `Find` |
+
+(RPG also has a `READPE`/`CHAIN ... TODOR TODOPF`-style syntax that names the
+record format alongside the file — you'll see it in other RPG code in the
+wild. This codebase doesn't use it: since each open file here only ever
+exposes one unambiguous record format at a time, `TODOBL.RPGLE` just names
+the file for `CHAIN`/`SETLL`/`READP` and the bare format for
+`WRITE`/`UPDATE`/`DELETE`, and RPG resolves the rest.)
 
 The critical mental model: **there is one implicit record buffer per file**,
 made of global-looking variables named after the columns (`TDID`, `TDDESC`,
@@ -172,17 +190,17 @@ column ordinals than to an ORM's tracked entity graph — there's no "the object
 the row," there's a shared buffer that different files' operations read and
 write through.
 
-Example, [`TODOBL.RPGLE:210-217`](../QRPGLESRC/TODOBL.RPGLE):
+Example, [`TODOBL.RPGLE:214-221`](../QRPGLESRC/TODOBL.RPGLE) (`EditTodoRecord`):
 
 ```rpgle
-CHAIN i_Id TODOPF TODOR;
+CHAIN i_Id TODOPF;
 w_Found = NOT %EOF(TODOPF);
 
 IF w_Found;
   TDDESC = i_Desc;
   TDDUE  = i_Due;
-  UPDATE TODOR TODOPF;
-END-IF;
+  UPDATE TODOR;
+ENDIF;
 ```
 
 Read this as: "look up the row keyed by `i_Id`. If found, overwrite two
@@ -205,15 +223,17 @@ free-form RPG has real procedures. In [`TODOBL.RPGLE`](../QRPGLESRC/TODOBL.RPGLE
 
 ```rpgle
 DCL-PROC MarkDoneRecord     EXPORT;
+
   DCL-PI *N;
     i_Id      PACKED(5:0) CONST;
   END-PI;
 
-  CHAIN i_Id TODOPF TODOR;
+  CHAIN i_Id TODOPF;
   IF NOT %EOF(TODOPF);
     TDDONE = '1';
-    UPDATE TODOR TODOPF;
-  END-IF;
+    UPDATE TODOR;
+  ENDIF;
+
 END-PROC;
 ```
 
@@ -229,8 +249,8 @@ Map the pieces:
 
 Notice `TODOMAIN.RPGLE` and `TODOTEST.RPGLE` both **paste in the exact same
 `DCL-PR` block** that `TODOBL.RPGLE` defines
-([`TODOMAIN.RPGLE:68-117`](../QRPGLESRC/TODOMAIN.RPGLE),
-[`TODOTEST.RPGLE:40-73`](../QRPGLESRC/TODOTEST.RPGLE)). There's no `#include`
+([`TODOMAIN.RPGLE`](../QRPGLESRC/TODOMAIN.RPGLE),
+[`TODOTEST.RPGLE`](../QRPGLESRC/TODOTEST.RPGLE)). There's no `#include`
 that both sides share automatically the way a C# interface or an EF Core
 `DbContext` reference does — each caller manually re-declares the contract it
 expects `TODOBL` to expose. (Larger RPG codebases pull shared prototypes into
@@ -251,14 +271,22 @@ returning `decimal`/`int` — the return type is declared right after `DCL-PI`.
 This project is split into three compiled objects:
 
 - **`TODOBL`** compiles to a **`*SRVPGM`** (service program) — see the header
-  comment in [`TODOBL.RPGLE:3-15`](../QRPGLESRC/TODOBL.RPGLE). This is the
+  comment in [`TODOBL.RPGLE`](../QRPGLESRC/TODOBL.RPGLE). This is the
   closest thing IBM i has to a `.dll` class library: a bundle of exported
   procedures with no `main`/entry point of its own, meant to be *called into*
   by other programs.
-- **`TODOMAIN`** compiles to a **`*PGM`** — the closest thing to a `.exe`. It
-  has the `Main()` call at the bottom
-  ([`TODOMAIN.RPGLE:342`](../QRPGLESRC/TODOMAIN.RPGLE)) and is what you
-  actually `CALL`.
+- **`TODOMAIN`** compiles to a **`*PGM`** — the closest thing to a `.exe`. and
+  is what you actually `CALL`. Its entry point is the bare statement
+  `Main();` near the *top* of the file
+  ([`TODOMAIN.RPGLE:124`](../QRPGLESRC/TODOMAIN.RPGLE), right after the file
+  declarations and prototypes) — **not** at the bottom the way you might
+  expect a `main()` to sit last. RPG's mainline logic (any executable
+  statement outside a `DCL-PROC`) always runs first regardless of where it
+  appears in the source, so it's conventionally placed right after the
+  declarations, with every `DCL-PROC ... END-PROC` block (`Main`,
+  `LoadSubfile`, `AddTodo`, `EditTodo`, `MarkDone`, `DeleteTodo`) coming
+  *after* it in the file even though none of that code runs until `Main();`
+  calls into it.
 - **`TODOTEST`** also compiles to a `*SRVPGM`, but one designed to be driven
   by a test runner rather than called by application code (§9).
 
@@ -268,16 +296,26 @@ way a C# project references a `.csproj`/`.dll`. Instead:
 1. `TODOMAIN.RPGLE` declares prototypes (`DCL-PR ... EXTPROC(...)`) describing
    what it *expects* to be able to call — like coding against an `interface`
    with no implementation reference yet.
-2. At compile time, `CRTBNDRPG PGM(TODO/TODOMAIN) ... BNDDIR(TODO/TODOBND)`
+2. At compile time, `CRTBNDRPG PGM(*CURLIB/TODOMAIN) ... BNDDIR(*CURLIB/TODOBND)`
    resolves those external symbols using a **binding directory** — see
-   [`AGENTS.md:22-30`](../AGENTS.md#compile-commands-must-run-in-this-exact-order):
+   [`AGENTS.md`](../AGENTS.md#compile-commands) for the real sequence, which
+   looks like this (`*CURLIB` throughout, and `SRCSTMF('...')` pointing at an
+   IFS path rather than `SRCFILE`/`SRCMBR`, since there's no source physical
+   file — see §1):
 
    ```cl
-   CRTBNDDIR BNDDIR(TODO/TODOBND)
+   CRTBNDDIR BNDDIR(*CURLIB/TODOBND)
    ...
-   ADDBNDDIRE BNDDIR(TODO/TODOBND) OBJ((TODO/TODOBL *SRVPGM))
-   CRTBNDRPG PGM(TODO/TODOMAIN) SRCFILE(TODO/QRPGLESRC) SRCMBR(TODOMAIN) BNDDIR(TODO/TODOBND)
+   ADDBNDDIRE BNDDIR(*CURLIB/TODOBND) OBJ((*CURLIB/TODOBL *SRVPGM))
+   CRTBNDRPG PGM(*CURLIB/TODOMAIN) SRCSTMF('.../QRPGLESRC/TODOMAIN.RPGLE') BNDDIR(*CURLIB/TODOBND)
    ```
+
+   **You will never actually type these.** `scripts/ibmi-compile.sh` is the
+   only supported way to build this project (see
+   [`CLAUDE.md`](../CLAUDE.md)) — it runs `makei build` (the **TOBi** build
+   engine), which works out this same dependency order from `iproj.json` and
+   per-directory `Rules.mk` files. The CL above is there so you understand
+   *what a binding directory is and does*, not as a script to copy-paste.
 
 A binding directory is a named, reusable *list of service programs to search*
 when resolving unresolved external calls — conceptually closer to a
@@ -286,9 +324,10 @@ named, indirect list rather than a direct file path. `TODOTEST` binds against
 the same `TODOBND` directory (plus RPGUnit's own service program) so it can
 call the exact same `TODOBL` procedures the real UI calls — that's the whole
 point of the split (spelled out in
-[`AGENTS.md:39-46`](../AGENTS.md#architecture)): **`TODOBL` is testable in
+[`AGENTS.md`](../AGENTS.md#architecture)): **`TODOBL` is testable in
 isolation from the 5250 screen**, the RPG equivalent of "put your business
 logic in a class library so you can unit test it without spinning up the UI."
+(As of this writing `TODOTEST` can't actually build — see §9.)
 
 ---
 
@@ -298,7 +337,9 @@ This is the part with no close .NET analogue, because green-screen (5250)
 terminals predate GUIs. [`QDDSSRC/TODODSPPF.DSPF`](../QDDSSRC/TODODSPPF.DSPF)
 is DDS again, but for a **display file** — it defines every screen
 ("record format") the program can show: exact row/column position of every
-label and input field, colors, function-key bindings.
+label and input field, colors, function-key bindings. This file currently
+declares five record formats: `TODOSFL`, `TODOCTL`, `TODOFTR`, `TODODET`, and
+`TODODEL` (§8 covers why the list screen alone needs three of those).
 
 ```
 A          R TODODET
@@ -306,20 +347,29 @@ A                                      CA03(03 'F3=Cancel')
 A                                      CA12(12 'F12=Cancel')
 A            DETMODE       10A  O  1  2
 A                                       5  2'Todo ID :'
-A            DETID          5P 0O  5 12EDTCDE(Z)
+A            DETID          5S 0O  5 12
 A                                       7  2'Description:'
 A            DETDESC       50A  B  7 15CHECK(LC)
 ```
 
 | DDS concept | .NET/WinForms-ish analogy |
 |---|---|
-| A **record format** in a display file (`TODODET`, `TODOCTL`, `TODODEL`) | One screen/form, or one `.razor`/`.xaml` view |
+| A **record format** in a display file (`TODOSFL`, `TODOCTL`, `TODOFTR`, `TODODET`, `TODODEL`) | One screen/form, or one `.razor`/`.xaml` view |
 | `1 30'IBM i RPG Todo Application'` (row 1, col 30, literal text) | A hardcoded `<Label>` at an absolute pixel/grid position — DDS screens are laid out by row/column on an 80×24 (or 132×27) character grid, there's no flow layout |
 | `DETDESC 50A B 7 15` — the `B` means **B**oth input and output | A two-way bound `<TextBox Text="{Binding ...}">` |
 | `O` (as in `DETID ... O`) | Output-only — a read-only `<Label>` bound to a value |
 | `CA03(03 'F3=Cancel')` | Wiring the F3 key to set indicator 03 and show "F3=Cancel" in the key-list footer — like binding a `KeyDown` handler, except the binding itself lives in the *view* definition, not code-behind |
-| `EDTCDE(Z)` | An edit code — formatting instructions for numeric display, like a `.ToString("format")` or WPF `StringFormat` |
 | `CHECK(LC)` | Input validation hint (lowercase allowed etc.) baked into the field definition |
+
+`DETID`'s `5S 0` is **zoned** decimal (`S`), not the packed decimal (`P`) you
+saw on `TODOPF.TDID` in §3 — DDS display fields can't be declared `P`; RPG
+converts packed↔zoned automatically when it moves `TDID` into `DETID`'s
+buffer. (An earlier version of this file mistakenly had `P` here, which is a
+real compile error in a DSPF, not just a style nit — see the DDS-bug list in
+[`AGENTS.md`](../AGENTS.md#compile-commands).) You *can* attach an edit code
+like `EDTCDE(Z)` to a numeric display field to control how it's formatted
+(suppressing leading zeros, for instance) — think `.ToString("format")` — but
+none of this file's current fields happen to use one.
 
 The DDS file is pure layout — it has **zero logic**. All screen behavior
 (what happens on F3, how validation errors show, what data populates the
@@ -338,8 +388,8 @@ RPG can read and set — there's no strongly-typed event system, just numbered
 flags whose *meaning* is assigned by convention and documented in comments.
 
 This project documents its indicator map in two places that must be kept in
-sync ([`AGENTS.md:60`](../AGENTS.md#critical-conventions)) —
-[`TODOMAIN.RPGLE:21-29`](../QRPGLESRC/TODOMAIN.RPGLE) and
+sync ([`AGENTS.md`](../AGENTS.md#critical-conventions)) —
+[`TODOMAIN.RPGLE:22-30`](../QRPGLESRC/TODOMAIN.RPGLE) and
 [`TODODSPPF.DSPF:10-18`](../QDDSSRC/TODODSPPF.DSPF):
 
 | Indicator | Meaning here | .NET-ish equivalent |
@@ -363,9 +413,16 @@ DOU *IN03;                    // Loop until F3=Exit
   EXFMT TODOCTL;              // show screen, wait for user input
   IF *IN03;
     LEAVE;
-  END-IF;
+  ENDIF;
 ```
-(from [`TODOMAIN.RPGLE:128-138`](../QRPGLESRC/TODOMAIN.RPGLE))
+(from `Main` in [`TODOMAIN.RPGLE`](../QRPGLESRC/TODOMAIN.RPGLE) — note
+`ENDIF`, not `END-IF`: both are legal free-form RPG, but this project's
+convention (documented in
+[`AGENTS.md`](../AGENTS.md#critical-conventions)) is that plain block
+closers — `ENDIF`/`ENDDO`/`ENDSL` — don't hyphenate. Only closers for
+*structured definitions* do: `END-PI`, `END-PR`, `END-DS`, `END-PROC` (you
+saw those in §5). Every code excerpt in this primer from here on follows
+that convention because the real source does.)
 
 `EXFMT` itself is the verb that **writes a screen and reads the user's
 response in one blocking call** — the closest .NET analogy is something like
@@ -384,10 +441,11 @@ scrollable, multi-row list control, the direct ancestor of a WinForms
 ```
 A          R TODOSFL                   SFL
 A            SFLOPT         1A  B  8  2
-A            TDID           5P 0O  8  4EDTCDE(Z)
+A            TDID           5S 0O  8  4
 A            TDDESC        50A  O  8 11
 ...
 A          R TODOCTL                   SFLCTL(TODOSFL)
+A                                      OVERLAY
 A                                      SFLSIZ(0099)
 A                                      SFLPAG(0014)
 ```
@@ -406,8 +464,44 @@ A                                      SFLPAG(0014)
   a number next to a row instead of clicking a button) is *the* classic
   5250 idiom, standing in for a row of `<button>`s in a modern grid.
 
-Populating it, from [`TODOMAIN.RPGLE:186-226`](../QRPGLESRC/TODOMAIN.RPGLE)
-(`LoadSubfile`):
+### `TODOFTR` — when the footer won't fit in the subfile control record
+
+You'd expect the list screen's footer text ("Valid options: 2=Edit
+4=Delete 5=Mark Done", row 23) to just be more literals inside `TODOCTL`,
+the way the title and column headings are. It isn't — it's its own record
+format, `TODOFTR`:
+
+```
+A          R TODOFTR
+A                                      OVERLAY
+A                                 23  2'Valid options: 2=Edit  +
+A                                      4=Delete  5=Mark Done'
+```
+
+The reason is a real DDS constraint worth knowing: `TODOCTL`'s subfile spans
+rows 8–21 (`SFLSIZ`/`SFLPAG` above), and DDS won't let a subfile control
+record also carry constant text at or below that span — the compiler reports
+`CPD7812` ("subfile control record overlaps subfile record") if you try.
+Row 23 is below the subfile, but it still can't live in `TODOCTL` itself, so
+it has to be a separate record format. Both `TODOCTL` and `TODOFTR` declare
+`OVERLAY`, which tells DDS "don't erase whatever else is on the screen when
+you write this format" — without it, writing one format would blank out
+whatever the other had already painted. `TODOMAIN`'s `Main` procedure writes
+both every time it redraws the list screen:
+
+```rpgle
+WRITE TODOFTR;
+EXFMT TODOCTL;
+```
+
+This is a good example of DDS's fixed-column, row/column-addressed model
+leaking into how you have to structure a screen — in a flow-layout UI
+framework a footer is just another element in the same view; here, "does
+this text fall inside or outside the subfile's row range" is a real
+constraint that forces a second record format.
+
+Populating the subfile itself, from `LoadSubfile` in
+[`TODOMAIN.RPGLE`](../QRPGLESRC/TODOMAIN.RPGLE):
 
 ```rpgle
 *IN52 = *ON;              // SFLCLR on = clear
@@ -424,9 +518,9 @@ IF ReadFirstTodo(l_Rec);
     WRITE TODOSFL;          // append one row
     IF NOT ReadNextTodo(l_Rec);
       LEAVE;
-    END-IF;
-  END-DO;
-END-IF;
+    ENDIF;
+  ENDDO;
+ENDIF;
 ```
 
 This is exactly the shape of `grid.Rows.Clear(); foreach (var item in
@@ -438,29 +532,39 @@ than append-only. `AGENTS.md` calls out the clear sequence as order-sensitive
 warns that displaying a zero-row subfile (`*IN50=*ON` with nothing written)
 is a runtime error — there's no framework-level empty-state handling like an
 `ItemsControl` gracefully rendering nothing; you must gate `*IN50` yourself
-([`TODOMAIN.RPGLE:219-222`](../QRPGLESRC/TODOMAIN.RPGLE)).
+(see the end of `LoadSubfile` in
+[`TODOMAIN.RPGLE`](../QRPGLESRC/TODOMAIN.RPGLE)).
 
-Reading back which rows the user edited/flagged is `READC` ("read changed"):
+Reading back which rows the user edited/flagged is `READC` ("read changed"),
+in `Main`:
 
 ```rpgle
 w_Rrn = 1;
 DOU w_Rrn > w_MaxRrn;
-  READC TODOSFL;                // next row the user typed something into
+  READC TODOSFL;                          // Read changed subfile records
   IF %EOF(TODODSPPF);
     LEAVE;
-  END-IF;
+  ENDIF;
+
   w_Option = SFLOPT;
   w_SelId  = TDID;
+
   SELECT;
-    WHEN w_Option = '2'; ExSr EditTodo;
-    WHEN w_Option = '4'; ExSr DeleteTodo;
-    WHEN w_Option = '5'; ExSr MarkDone;
-  END-SL;
-  SFLOPT = ' ';                 // clear the option so it doesn't fire again
+    WHEN w_Option = '2';                  // Edit
+      EditTodo();
+    WHEN w_Option = '4';                  // Delete
+      DeleteTodo();
+    WHEN w_Option = '5';                  // Mark done
+      MarkDone();
+    OTHER;
+      // Unknown option - ignore
+  ENDSL;
+
+  SFLOPT = ' ';                           // Clear the option field
   w_Rrn += 1;
-END-DO;
+ENDDO;
 ```
-([`TODOMAIN.RPGLE:147-170`](../QRPGLESRC/TODOMAIN.RPGLE))
+(from `Main` in [`TODOMAIN.RPGLE`](../QRPGLESRC/TODOMAIN.RPGLE))
 
 `READC` only returns rows whose input-capable fields (like `SFLOPT`) changed
 since the last write — a built-in "dirty row" iterator, saving you from
@@ -469,12 +573,11 @@ this in modern web/desktop frameworks; it's closest in spirit to only firing
 change events for edited grid cells rather than re-diffing the whole
 collection.
 
-`ExSr` calls a **subroutine** (`BegSr`/`EndSr`, not shown here because this
-program uses `DCL-PROC` procedures named the same as the old-style
-subroutines it calls — `AddTodo`, `EditTodo`, `MarkDone`, `DeleteTodo` are
-actual procedures, called with `()`-less `ExSr` syntax for historical/stylistic
-reasons in this file even though they're modern procs). Functionally, just
-read `ExSr Foo;` as `Foo();`.
+`AddTodo`, `EditTodo`, `MarkDone`, and `DeleteTodo` are ordinary `DCL-PROC`
+procedures (§5), called directly with `()` from inside the `SELECT`/`WHEN`
+block — no old-style `ExSr`/subroutine indirection here. (You may still run
+into `ExSr`/`BegSr`/`EndSr` — RPG's older subroutine-call syntax — reading
+other RPG code in the wild; this codebase just doesn't use it.)
 
 ---
 
@@ -482,6 +585,17 @@ read `ExSr Foo;` as `Foo();`.
 
 [`QRPGLESRC/TODOTEST.RPGLE`](../QRPGLESRC/TODOTEST.RPGLE) is a test suite
 using **RPGUnit**, IBM i's xUnit-family test framework.
+
+> **This does not currently run.** `RPGUNIT` is not installed on this pub400
+> instance — the library doesn't exist on the profile and isn't available
+> via `yum`/PASE either (confirmed 2026-09-08; see
+> [`CLAUDE.md`](../CLAUDE.md#known-limitation)). `TODOTEST.RPGLE` needs
+> `/COPY RPGUNIT/QINCLUDE,TESTCASE` to even *compile*, not just to bind, so
+> `scripts/ibmi-compile.sh` fails on this target with `make: No rule to make
+> target '/QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM'`. This isn't currently a
+> priority to fix. Read the rest of this section for what RPGUnit *would*
+> give you — the mapping and the code below are accurate — but don't expect
+> to actually run `RUCALLTST` against this repo today.
 
 | RPGUnit | xUnit/NUnit equivalent |
 |---|---|
@@ -491,7 +605,7 @@ using **RPGUnit**, IBM i's xUnit-family test framework.
 | `assert(cond: message)` | `Assert.True(cond, message)` |
 | `iEqual(expected: actual)` | `Assert.Equal(expected, actual)` for integers |
 | `aEqual(expected: actual)` | `Assert.Equal(expected, actual)` for character/alpha data |
-| `RUCALLTST TSTPGM(TODO/TODOTEST)` | `dotnet test` |
+| `RUCALLTST TSTPGM(*CURLIB/TODOTEST)` | `dotnet test` (aspirational — see the note above) |
 
 ```rpgle
 DCL-PROC testMarkDoneRecord EXPORT;
@@ -512,8 +626,8 @@ END-PROC;
 
 Notice these are **integration tests against the real table**, not tests
 against a mock/in-memory store — there's no built-in fake `TODOPF`. The
-convention this project uses to stay safe (documented in
-[`TODOTEST.RPGLE:11-15`](../QRPGLESRC/TODOTEST.RPGLE)) is reserving specific
+convention this project uses to stay safe (documented in the header comment
+of [`TODOTEST.RPGLE`](../QRPGLESRC/TODOTEST.RPGLE)) is reserving specific
 ID values (`77`, `9999`, `8001`, `8002`) that won't collide with real
 application data, and having every test clean up its own row at the end —
 the RPG-world equivalent of seeding and tearing down a test database
@@ -521,7 +635,7 @@ transaction, done by hand since there's no `TransactionScope`/`WebApplicationFac
 to do it for you.
 
 `setUp`/`tearDown` here just call the same `OpenFiles`/`CloseFiles` the real
-UI calls ([`TODOTEST.RPGLE:79-95`](../QRPGLESRC/TODOTEST.RPGLE)) — this is
+UI calls (see `TODOTEST.RPGLE`) — this is
 only possible because `TODOBL` is a separate service program with no
 dependency on the display file, which is the entire reason for the
 `TODOBL`/`TODOMAIN` split (§6).
@@ -558,27 +672,31 @@ DCL-DS l_Rec LIKEDS(todoRec_t);
 `LIKEDS` is "give me a real, storage-backed data structure shaped exactly
 like `todoRec_t`" — like writing `TodoRec l_Rec = new();` against a `record`
 type. Passing `LIKEDS(todoRec_t)` as a parameter type
-([`TODOBL.RPGLE:92-95`](../QRPGLESRC/TODOBL.RPGLE), `ReadNextTodo`'s
-`o_Rec` parameter) is how this codebase returns a "row" from a procedure
-without a class/object system — it's an out-parameter struct, filled in by
-the callee:
+(`ReadNextTodo`'s `o_Rec` parameter in
+[`TODOBL.RPGLE`](../QRPGLESRC/TODOBL.RPGLE)) is how this codebase returns a
+"row" from a procedure without a class/object system — it's an
+out-parameter struct, filled in by the callee:
 
 ```rpgle
 DCL-PROC GetTodoById        EXPORT;
+
   DCL-PI *N IND;
     i_Id      PACKED(5:0) CONST;
     o_Rec     LIKEDS(todoRec_t);
   END-PI;
 
-  CHAIN i_Id TODOPF TODOR;
+  CHAIN i_Id TODOPF;
   w_Found = NOT %EOF(TODOPF);
+
   IF w_Found;
     o_Rec.tdId   = TDID;
     o_Rec.tdDesc = TDDESC;
     o_Rec.tdDone = TDDONE;
     o_Rec.tdDue  = TDDUE;
-  END-IF;
+  ENDIF;
+
   RETURN w_Found;
+
 END-PROC;
 ```
 
@@ -599,7 +717,7 @@ without `CONST` are just implicitly mutable/"out" by default).
 
 RPG itself doesn't enforce any of this — these are this project's own
 conventions, spelled out in
-[`AGENTS.md:58`](../AGENTS.md#critical-conventions):
+[`AGENTS.md`](../AGENTS.md#critical-conventions):
 
 | Prefix | Meaning | .NET-ish parallel |
 |---|---|---|
@@ -623,14 +741,14 @@ symbols within the display file.
 Put it all together by tracing "user edits a todo," which touches every
 concept above:
 
-1. `Main()` calls `LoadSubfile` (§8) then `EXFMT TODOCTL` (§7), which paints
-   the list screen and blocks for input.
+1. `Main()` calls `LoadSubfile` (§8), then `WRITE TODOFTR` (§8's note on why
+   the footer is a separate record format) then `EXFMT TODOCTL` (§7), which
+   paints the list screen and blocks for input.
 2. User types `2` in the option column next to a row and presses Enter.
    `SFLOPT` for that row now holds `'2'` in the display file's buffer.
 3. `EXFMT` returns. The `READC TODOSFL` loop (§8) finds that one changed row,
    reads `w_Option = SFLOPT` and `w_SelId = TDID` out of the row buffer, sees
-   `'2'`, and calls `EditTodo` (§5, a real procedure despite the `ExSr` call
-   syntax).
+   `'2'`, and calls `EditTodo()` directly (§5) from inside the `SELECT`/`WHEN`.
 4. `EditTodo` calls `GetTodoById(w_SelId: l_Rec)` — a prototyped call
    (§5/§6) that crosses from the `TODOMAIN` `*PGM` into the `TODOBL`
    `*SRVPGM`, resolved at bind time via `TODOBND` (§6). Inside `TODOBL`,
@@ -682,7 +800,7 @@ every read, write, and screen paint is an explicit verb in the source.
 | `RRN` | Relative record number — a subfile row's address | Grid row index |
 | `CHAIN` | Random-access read by key | `Find(id)` |
 | `SETLL` | Position a file cursor without reading | Reset a cursor/enumerator |
-| `READ` / `READPE` | Sequential read, forward / backward | `MoveNext()` |
+| `READ` / `READP` | Sequential read, forward / backward | `MoveNext()` |
 | `READC` | Read next subfile row with unread changes | Iterate only "dirty" grid rows |
 | `%EOF` | True if the last op found nothing / hit end | `null` check / `false` from `Read()` |
 | `WRITE` | Insert a record (or a subfile row) | `INSERT` / add a grid row |
@@ -697,12 +815,17 @@ every read, write, and screen paint is an explicit verb in the source.
 
 - Read [`AGENTS.md`](../AGENTS.md) again now that the terms make sense — it's
   a dense but accurate summary of this exact project's conventions.
-- Read [`docs/DEPLOY.md`](DEPLOY.md) for how this gets onto the pub400.com
-  server.
-- Read [`docs/todo-rpg-plan.md`](todo-rpg-plan.md) and
-  [`docs/rpgunit-testable-plan.md`](rpgunit-testable-plan.md) for the design
-  history behind why the code is shaped this way (in particular, why
-  `TODOBL`/`TODOMAIN` are split at all).
+- Read [`docs/DEPLOY.md`](DEPLOY.md) for how this actually gets onto the
+  pub400.com server today: `scripts/ibmi-deploy.sh` has pub400 itself pull
+  this repo from GitHub onto its IFS, then `scripts/ibmi-compile.sh` builds
+  it there with TOBi (§1, §6) — there's no local-to-server upload step at
+  all.
+- Read [`docs/plans/archive/todo-rpg-plan.md`](plans/archive/todo-rpg-plan.md)
+  and [`docs/plans/archive/rpgunit-testable-plan.md`](plans/archive/rpgunit-testable-plan.md)
+  for the design history behind why the code is shaped this way (in
+  particular, why `TODOBL`/`TODOMAIN` are split at all). These are archived
+  planning documents, superseded by the current state of the code — treat
+  them as history, not as a description of today's workflow.
 - The biggest remaining gap between this primer and real fluency is DDS's
   fixed-column syntax (§7) — it's the one language here that free-form RPG's
   friendliness doesn't extend to. Spend time cross-referencing

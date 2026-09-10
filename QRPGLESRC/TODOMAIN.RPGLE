@@ -8,9 +8,7 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 // Screens  : TODODSPPF (QDDSSRC)
 // Data     : delegated entirely to TODOBL service program
 //
-// Compile command (compile all DDS objects and TODOBL first):
-//   CRTBNDRPG PGM(TODO/TODOMAIN) SRCFILE(TODO/QRPGLESRC) SRCMBR(TODOMAIN)
-//             BNDDIR(TODO/TODOBND)
+// Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build/dependency order.
 //
 // Screen Flow:
 //   TODOCTL (list) --F6---> TODODET (add)  --> TODOCTL

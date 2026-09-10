@@ -1,3 +1,11 @@
+> **Archived (2026-09-10):** superseded design history. This was the original build plan for the
+> app, using a `YOURLIB` placeholder library and `CRTSRCPF` source physical files
+> (`QDDSSRC`/`QRPGLESRC` as uploaded source members). The app was built, but that library and
+> source-member model is not what shipped — there are no source physical files and no `YOURLIB`
+> placeholder; source lives in git and pub400 pulls it directly onto the IFS. See
+> [AGENTS.md](../../../AGENTS.md) and [docs/DEPLOY.md](../../DEPLOY.md) for the architecture and
+> deploy process that actually shipped.
+
 # IBM i RPG Todo Application — Plan
 
 ## Overview

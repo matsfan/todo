@@ -1,3 +1,12 @@
+> **Archived (2026-09-10):** superseded design history. This plan designed `scp`-based upload of
+> `QDDSSRC`/`QRPGLESRC` to the IFS, with both scripts taking a pub400 username as `$1`. It was
+> superseded by the git-pull-on-pub400 deploy model (pub400 clones/fetches the repo itself and
+> `git reset --hard`s onto a requested ref) and by `.env`-based credentials — the scripts'
+> current arguments are a git ref and an optional make target. See
+> [scripts/ibmi-deploy.sh](../../../scripts/ibmi-deploy.sh),
+> [scripts/ibmi-compile.sh](../../../scripts/ibmi-compile.sh), and
+> [docs/DEPLOY.md](../../DEPLOY.md) for the current source of truth.
+
 # Plan: Create ibmi-deploy.sh and ibmi-compile.sh
 
 ## Overview

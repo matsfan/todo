@@ -11,12 +11,20 @@ No package manager — compilation happens on the IBM i server, driven by **TOBi
 ## Repo Layout
 
 ```
-QDDSSRC/        ← DDS source, pulled directly onto the IFS on pub400 via `git clone`/`git pull`
-QRPGLESRC/      ← RPG source, same git-based deploy — no source physical file involved
-QBNDSRC/        ← Binder source (TOBi requires this to build a *SRVPGM; see Compile Commands)
-docs/           ← Human-readable docs only (not uploaded to IBM i)
-iproj.json      ← TOBi project config (target library, build command)
-Rules.mk        ← TOBi build rules (root + one per source directory)
+QDDSSRC/            ← DDS source, pulled directly onto the IFS on pub400 via `git clone`/`git pull`
+QRPGLESRC/          ← RPG source, same git-based deploy — no source physical file involved
+QBNDSRC/            ← Binder source (TOBi requires this to build a *SRVPGM; see Compile Commands)
+scripts/            ← ibmi-deploy.sh / ibmi-compile.sh — the only permitted way to touch pub400
+.github/workflows/  ← deploy-test.yml: auto-deploys + compiles MBPRICE2 on every push to main
+.bob/               ← Bob's rule files (rules-agent/, rules-plan/, rules-ask/), the Stop hook
+                      (hooks/ibmi-post-stop.sh) and its build log (logs/ibmi-build.log)
+.env / .env.example ← deploy/compile credentials (IBMI_USER, IBMI_IDENTITY, IBMI_CURLIB); .env
+                      is git-ignored, .env.example is the committed template
+docs/               ← Human-readable docs only (not uploaded to IBM i)
+iproj.json          ← TOBi project config (target library, build command)
+Rules.mk            ← TOBi build rules (root + one per source directory)
+CLAUDE.md           ← Instructions for Claude Code; points back to this file and to
+                      .bob/rules-*/AGENTS.md for the rules Bob follows
 ```
 
 File extensions are IBM i member types: `.PF`, `.LF`, `.DSPF`, `.RPGLE`
@@ -53,7 +61,9 @@ the project's `iproj.json` and per-directory `Rules.mk` files rather than a hand
 sequence. See `docs/plans/cicd-pipeline-plan.md` Sub-Task 7 for why this replaced the old
 delete-everything-and-recompile-all script.
 
-The dependency order TOBi builds in is still the one that matters when editing `Rules.mk`:
+The dependency order TOBi builds in is still the one that matters when editing `Rules.mk`. This
+is a reference for that order, **not a sequence of commands to run by hand** — `scripts/ibmi-compile.sh`
+is the only supported way to build, see below:
 
 ```cl
 CRTPF     FILE(*CURLIB/TODOPF)     SRCSTMF('.../QDDSSRC/TODOPF.PF')
@@ -73,6 +83,27 @@ rule for building a `*SRVPGM` straight from a module the way plain `CRTSRVPGM ..
 (implicit `EXPORT(*ALL)`) does, so each service program's exports are now declared explicitly
 via `STRPGMEXP`/`EXPORT SYMBOL`/`ENDPGMEXP`, matching the `EXPORT`-flagged procedures already in
 `TODOBL.RPGLE`/`TODOTEST.RPGLE`.
+
+**In practice `scripts/ibmi-compile.sh` does more than run `makei build` once**, because TOBi on
+this pub400 install cannot fully realize the order above on its own:
+- It runs `makei build` twice around an explicit `CRTSRVPGM`/`CRTBNDDIR`/`ADDBNDDIRE` step, because
+  TOBi has no rule to build a `*SRVPGM` from binder source or a `*BNDDIR` at all — `make` silently
+  reports those targets "up to date" even though the objects don't exist. The script's first
+  `makei build` pass is allowed to fail; it then explicitly runs `DLTSRVPGM`/`CRTSRVPGM` for
+  `TODOBL.SRVPGM` and `DLTBNDDIR`/`CRTBNDDIR`/`ADDBNDDIRE` for `TODOBND.BNDDIR`, then re-runs
+  `makei build` a second time now that those exist.
+- It then explicitly binds `TODOMAIN.PGM` via its own `CRTBNDRPG ... BNDDIR($CURLIB/TODOBND)` call,
+  because makei's own generated `CRTBNDRPG` command never emits a `BNDDIR()` parameter at all, so
+  a plain `makei build` can never resolve `TODOBL`'s exports into `TODOMAIN` no matter how correct
+  `TODOBND` itself is. This explicit bind is the authoritative last step and always runs.
+- It also runs a CL wrapper that does `CHGCURLIB` and then `QSH`s into the rest of the script, so
+  the whole build runs as descendants of one `CHGCURLIB` — a bare `CHGCURLIB` in one PASE
+  `system()` call has no effect on a later, separate `system()` call, which was the root cause of
+  an earlier `CPF4131` level-check failure (unqualified `DCL-F TODODSPPF WORKSTN` in `TODOMAIN`,
+  and `TODOBL`'s `TODOPF`/`TODOLF`, resolve at compile time via the job's real current library).
+
+See `scripts/ibmi-compile.sh` itself for the exact commands; treat this section as the dependency
+order and the reasons for the extra steps, not as a script to retype.
 
 **RPGUnit is not installed on pub400 (confirmed 2026-09-08)** — the `RPGUNIT` library does not
 exist anywhere on this profile (`DSPOBJD OBJ(*ALL/RPGUNIT) OBJTYPE(*LIB)` → object not found), and
@@ -121,7 +152,10 @@ CALL MBPRICE2/TODOMAIN
 ```
 then `CHGCURLIB CURLIB(MBPRICE1)` to go back to dev afterward.
 
-Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)`
+Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)` — **currently blocked, not a step you can perform
+today.** `TODOTEST` can't be built (see RPGUnit note above), so there is no `*CURLIB/TODOTEST`
+service program to call `RUCALLTST` against yet. Documented here as the intended command once
+RPGUnit is available.
 
 ## Deploy & Compile
 
@@ -142,7 +176,8 @@ deploys the currently checked-out local branch.
 
 The project uses a two-module design:
 
-- **`TODOBL` (`*SRVPGM`)** — owns all file I/O and business logic (`TODOLF`, `TODOPF`, all CRUD procedures). Bound into dependents via the `TODOBND` binding directory.
+- **`TODOBL` (`*SRVPGM`)** — owns all file I/O and business logic (`TODOLF`, `TODOPF`, all CRUD procedures). Bound into dependents via the `TODOBND` binding directory. Exports exactly these 11 procedures (declared `EXPORT` in `TODOBL.RPGLE` and listed in `QBNDSRC/TODOBL.BND`):
+  `OpenFiles`, `CloseFiles`, `GetNextId`, `ValidateDescription`, `AddTodoRecord`, `EditTodoRecord`, `MarkDoneRecord`, `DeleteTodoRecord`, `ReadFirstTodo`, `ReadNextTodo`, `GetTodoById`.
 - **`TODOMAIN` (`*PGM`)** — thin 5250 UI shell. Declares only `TODODSPPF` and delegates all data operations to `TODOBL` via prototypes.
 
 This split allows `TODOBL` to be bound by the RPGUnit test suite (`TODOTEST`) independently of the UI program.
@@ -155,6 +190,7 @@ This split allows `TODOBL` to be bound by the RPGUnit test suite (`TODOTEST`) in
 - **`TODOPF` is opened for `*UPDATE:*OUTPUT:*DELETE`**; `TODOLF` is opened read-only. Never write/update/delete through the logical file.
 - **`TODOLF` is declared with `RENAME(TODOR:TODOLFR)`** — `TODOLF`'s DDS reuses `TODOPF`'s record format name (`TODOR`). RPG won't allow two open files with the same external format name, so reads against `TODOLF` use the renamed format `TODOLFR` (e.g. `READ TODOLFR`, `READP TODOLFR`), while writes/updates/deletes against `TODOPF` use `TODOR` directly.
 - **Block-closing keywords are `ENDIF`/`ENDDO`/`ENDSL` — no hyphen.** Only structured-definition closers take a hyphen: `END-PI`, `END-PR`, `END-DS`, `END-PROC`. Using `END-IF`/`END-DO` is a compile error in fully free-form RPG.
+- **`TODOFTR` is a separate record format from `TODOCTL`** (the list screen's footer, row 23) — content at or below the subfile's own row span (rows 8–21, `SFLPAG`) can't live inside the subfile control record itself. Both `TODOCTL` and `TODOFTR` declare `OVERLAY` so writing/re-`EXFMT`ing one doesn't erase the other off the screen. `TODOMAIN`'s `Main` procedure does `WRITE TODOFTR;` before `EXFMT TODOCTL;` on every pass through the list screen. See `QDDSSRC/TODODSPPF.DSPF`.
 - **Subfile clear sequence is order-sensitive**: set `*IN52=*ON`, `WRITE TODOCTL`, then immediately `*IN52=*OFF` before writing any rows.
 - **`*IN50` (SFLDSP) must stay `*OFF` when the subfile has zero rows** — displaying an empty subfile causes a runtime error.
 - **`CHAIN` uses `TODOPF` (not `TODOLF`) for all updates, deletes, and mark-done** — positioning on the logical file is only for sequential reads.

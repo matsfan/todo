@@ -1,8 +1,7 @@
      A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
      A* TODOPF - Todo Application Physical File
      A*
-     A* Compile command:
-     A*   CRTPF FILE(TODO/TODOPF) SRCFILE(TODO/QDDSSRC) SRCMBR(TODOPF)
+     A* Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build order.
      A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
      A                                      UNIQUE
      A          R TODOR

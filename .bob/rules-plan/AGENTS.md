@@ -1,9 +1,9 @@
 # Project Architecture Rules (Non-Obvious Only)
 
-- All CRUD operations use two separate file handles: `TODOLF` for sequential reads (subfile load, ID generation) and `TODOPF` for mutations. They are not interchangeable.
-- The subfile (`TODOSFL`) is a full-page subfile with `SFLSIZ(99)` — it is completely cleared and reloaded from scratch on every return to the list screen. There is no incremental update path.
-- `TDDONE='1'` records are filtered in RPG (`LoadSubfile`), not at the logical file level — `TODOLF` has no select/omit. Adding a select/omit to the LF would require recompiling both `TODOLF` and `TODOMAIN`.
-- `GetNextId` is a max-ID-plus-one scheme, not a sequence object — concurrent users on a multi-user system could generate duplicate IDs. This is acceptable for pub400.com single-user use only.
-- Program entry is `Main()` called at the very last line of the source (`line 326`) — the call site is outside any procedure, which is the standard IBM i free-form entry pattern.
-- `USROPN` on both database files means the program controls open/close; if a future procedure needs to access the files before `Main()` opens them, it will abend.
+- `TODOBL` (`*SRVPGM`) owns all CRUD logic and both file handles: `TODOLF` for sequential reads (subfile load, ID generation) and `TODOPF` for mutations. They are not interchangeable. `TODOMAIN` (`*PGM`) is a thin UI shell that calls `TODOBL`'s 11 exported procedures — it declares no database files of its own, only the display file `TODODSPPF`.
+- The subfile (`TODOSFL`) is a full-page subfile with `SFLSIZ(99)` — it is completely cleared and reloaded from scratch on every return to the list screen (`LoadSubfile`, in `TODOMAIN`). There is no incremental update path.
+- `TDDONE='1'` records are filtered in RPG (`LoadSubfile`), not at the logical file level — `TODOLF` has no select/omit. Adding a select/omit to the LF would require recompiling `TODOLF`, `TODOBL`, and `TODOMAIN`.
+- `GetNextId` (in `TODOBL`) is a max-ID-plus-one scheme, not a sequence object — concurrent users on a multi-user system could generate duplicate IDs. This is acceptable for pub400.com single-user use only.
+- Program entry is `Main();`, called at line 124 of `TODOMAIN.RPGLE` — right after the prototype/declaration section and before any `DCL-PROC` body, not at the end of the file. (`DCL-PROC DeleteTodo` is the procedure that starts around line 333; don't confuse the two when reading line numbers.)
+- `USROPN` on `TODOLF`/`TODOPF` means `TODOBL` controls open/close, via its exported `OpenFiles`/`CloseFiles` procedures called from `TODOMAIN`'s `Main` — not `TODOMAIN` itself. If a future procedure needs the files open before `Main()` calls `OpenFiles()`, it will abend.
 - Deploy and compile steps do not need to be planned as manual tasks — they are handled automatically by `scripts/ibmi-deploy.sh` / `scripts/ibmi-compile.sh` via the Bob `Stop` hook (`.bob/hooks/ibmi-post-stop.sh`). Plans should focus on source changes only.
