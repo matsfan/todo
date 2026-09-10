@@ -37,6 +37,7 @@
      A* TODOCTL - Subfile control record format (the list screen)
      A*--------------------------------------------------------------------------
      A          R TODOCTL                   SFLCTL(TODOSFL)
+     A                                      OVERLAY
      A                                      SFLSIZ(0099)
      A                                      SFLPAG(0014)
      A                                      CA03(03 'F3=Exit')
@@ -74,12 +75,21 @@
      A                                      COLOR(WHT)
      A                                  7 75'----'
      A                                      COLOR(WHT)
-     A*  Valid options reminder removed: it sat at row 23, below the
-     A*  subfile's own row 8-21 span. Content in a subfile control record
-     A*  below the subfile itself triggers CPD7812 "Subfile control
-     A*  record overlaps subfile record" -- per IBM i convention this
-     A*  needs its own separate record format (written before/alongside
-     A*  TODOCTL), which is a larger DDS+RPG restructure left for later.
+     A*
+     A*--------------------------------------------------------------------------
+     A* TODOFTR - List screen footer (row 23). Separate record format because
+     A* content at or below a subfile's own row span cannot live inside the
+     A* subfile control record itself -- TODOCTL's own row 8-21 (SFLPAG) span
+     A* triggers CPD7812 "Subfile control record overlaps subfile record" if
+     A* row 23 content is declared there directly. WRITE this alongside
+     A* TODOCTL in TODOMAIN.RPGLE (see Main); both formats need OVERLAY so
+     A* writing/re-EXFMTing one doesn't erase the other from the screen.
+     A*--------------------------------------------------------------------------
+     A          R TODOFTR
+     A                                      OVERLAY
+     A                                 23  2'Valid options: 2=Edit  +
+     A                                      4=Delete  5=Mark Done'
+     A                                      COLOR(BLU)
      A*
      A*--------------------------------------------------------------------------
      A* TODODET - Add / Edit detail screen

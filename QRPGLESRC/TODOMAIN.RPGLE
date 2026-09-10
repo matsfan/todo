@@ -136,6 +136,13 @@ DCL-PROC Main;
 
     LoadSubfile();                             // Rebuild the subfile
 
+    // TODOFTR is a separate record format from TODOCTL because content at
+    // or below a subfile's own row span (rows 8-21 here) can't live inside
+    // the subfile control record itself - see QDDSSRC/TODODSPPF.DSPF.
+    // Both records declare OVERLAY so writing/re-EXFMTing one doesn't erase
+    // the other off the screen.
+    WRITE TODOFTR;
+
     // Show list screen and wait for user input
     EXFMT TODOCTL;
 
