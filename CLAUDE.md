@@ -30,6 +30,9 @@ get found and fixed as part of the same iteration loop, instead of being silentl
 
 ## Known limitation
 
-RPGUnit is not installed on this pub400 instance. `TODOTEST.BND`/`TODOTEST.MODULE` will fail to
-build (`make: No rule to make target '/QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM'`) — this is expected
-and not currently a priority to fix.
+RPGUnit is not installed on this pub400 instance. `TODOTEST.MODULE` fails to compile (it needs
+`/COPY RPGUNIT/QINCLUDE,TESTCASE`, which doesn't exist), and `TODOTEST.BND` separately fails
+(`make: No rule to make target '/QSYS.LIB/RPGUNIT.LIB/RUCRTTST.SRVPGM'`) — this is expected and
+not currently a priority to fix. See [AGENTS.md](AGENTS.md#compile-commands) for the full story.
+`TODOTEST.RPGLE` exists as source, targeting `TODOBL`'s exported procedures; `RUCALLTST` is not
+something you can run today.

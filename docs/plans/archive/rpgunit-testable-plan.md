@@ -1,3 +1,12 @@
+> **Archived (2026-09-10):** superseded design history. All five sub-tasks here were completed,
+> and the `TODOBL`/`TODOMAIN` service-program split this plan designed **is** the current
+> architecture. What's stale: the `TODO`-library `CRTSRVPGM`/`SRCFILE` scaffolding commands
+> throughout (there is no `TODO` library or source physical file — see
+> [AGENTS.md](../../../AGENTS.md)'s architecture section for the real layout), and Sub-Task 4's
+> test list, which specifies `testGetNextId_EmptyFile` — the test that actually shipped is
+> `testGetNextId_NoHigherRecord`. Also note the test suite cannot currently build: RPGUnit is not
+> installed on this pub400 profile (confirmed 2026-09-08), so `RUCALLTST` cannot run today.
+
 # RPGUnit Testable Refactor Plan
 
 ## Overview

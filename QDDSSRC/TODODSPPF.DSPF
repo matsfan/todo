@@ -17,8 +17,7 @@
      A*   *IN53  - SFLEND   : bottom-of-list indicator (shows "Bottom")
      A*   *IN60  - ERRMSG   : error / info message overlay on TODODET
      A*
-     A* Compile command (no prerequisites):
-     A*   CRTDSPF FILE(TODO/TODODSPPF) SRCFILE(TODO/QDDSSRC) SRCMBR(TODODSPPF)
+     A* Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build order.
      A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
      A*
      A*--------------------------------------------------------------------------

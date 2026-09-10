@@ -1,3 +1,9 @@
+> **Archived (2026-09-10):** superseded design history for the Bob `Stop`-hook deploy/compile
+> automation. The hook it describes was built and is live at
+> [.bob/hooks/ibmi-post-stop.sh](../../../.bob/hooks/ibmi-post-stop.sh). See the "Update
+> (2026-09-08)" note directly below for how the scripts themselves evolved past this plan's
+> original design.
+
 # Deploy & Compile Hook Plan
 
 > **Update (2026-09-08):** the scripts evolved past what this plan describes once the
@@ -193,11 +199,11 @@ agent or contributor hand-rolls `CRT*` commands or `scp` calls.
      `scripts/ibmi-deploy.sh` / `scripts/ibmi-compile.sh` and the Bob `Stop` hook.
 
 **Relevant Context**
-- Root `AGENTS.md`: [`AGENTS.md`](../../AGENTS.md) — 122 lines, "Compile Commands" section
+- Root `AGENTS.md`: [`AGENTS.md`](../../../AGENTS.md) — 122 lines, "Compile Commands" section
   already references `makei build` but does not mention Bob's hook.
-- `.bob/rules-agent/AGENTS.md`: [`rules-agent/AGENTS.md`](../rules-agent/AGENTS.md) — 11 lines,
+- `.bob/rules-agent/AGENTS.md`: [`rules-agent/AGENTS.md`](../../../.bob/rules-agent/AGENTS.md) — 11 lines,
   coding conventions only; deploy rule is absent.
-- `.bob/rules-plan/AGENTS.md`: [`rules-plan/AGENTS.md`](../rules-plan/AGENTS.md) — 9 lines,
+- `.bob/rules-plan/AGENTS.md`: [`rules-plan/AGENTS.md`](../../../.bob/rules-plan/AGENTS.md) — 9 lines,
   architecture notes only.
 
 **Status:** [x] done

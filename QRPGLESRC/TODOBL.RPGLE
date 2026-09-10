@@ -9,11 +9,7 @@ CTL-OPT NOMAIN;
 // Data     : TODOPF    physical file  (QDDSSRC) - opened for UPDATE/OUTPUT/DELETE
 //            TODOLF    logical file   (QDDSSRC) - opened read-only
 //
-// Compile commands (compile DDS objects first, then):
-//   CRTPGM  MODULE(TODO/TODOBL)  SRCFILE(TODO/QRPGLESRC)  SRCMBR(TODOBL)
-//   CRTSRVPGM SRVPGM(TODO/TODOBL) MODULE(TODO/TODOBL)
-//     (or one step: CRTSRVPGM SRVPGM(TODO/TODOBL) SRCFILE(TODO/QRPGLESRC)
-//                              SRCMBR(TODOBL) MODULE(*SRVPGM))
+// Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build/dependency order.
 //
 // Exported procedures:
 //   OpenFiles            - open TODOLF and TODOPF
@@ -143,7 +139,7 @@ END-PROC;
 
 // ---------------------------------------------------------------------------
 // GetNextId - Return the next available todo ID
-//   Uses SETLL *END + READPE on TODOLF to find the highest existing ID.
+//   Uses SETLL *END + READP on TODOLF to find the highest existing ID.
 //   Returns 1 when the file is empty.
 // ---------------------------------------------------------------------------
 
