@@ -37,56 +37,49 @@ else
   MAKEI_TARGET_FLAG=" -t ${TARGET}"
 fi
 
-# Builds via TOBi (makei), driven by the project's iproj.json/Rules.mk files.
-# makei build is dependency-aware: it only rebuilds objects whose source (or
-# dependencies) changed since the last run.
+# ---------------------------------------------------------------------------
+# Why this file has two layers (a CL wrapper CALLing a body shell script)
+# instead of one flat remote script:
 #
-# The remote script is written to a temp file locally and piped into
-# 'ssh ... bash' via process substitution.  This keeps the SSH channel's
-# stdout/stderr fully connected to the local terminal (no stdin redirection on
-# the ssh command itself) so makei output streams back in real time.
+# Confirmed live (2026-09-09/10) that a bare 'CHGCURLIB' run via one
+# PASE system() call has NO effect on any *later*, separate system() call --
+# each system() invocation runs as its own isolated unit and does not share
+# job-attribute state (current library, library list) with the next one,
+# even within the same continuous SSH/bash session. (QTEMP behaves the same
+# way, which is the earlier-documented reason CL calls can't rely on it
+# across separate system() calls either.) This was the root cause of a
+# CPF4131 level-check failure: TODOMAIN.RPGLE's unqualified
+# "DCL-F TODODSPPF WORKSTN" (and TODOBL.RPGLE's TODOPF/TODOLF) resolve at
+# compile time via the job's real *LIBL/current library, which a standalone
+# CHGCURLIB system() call earlier in the script could never actually change
+# for that later compile step.
 #
-# Variables expanded locally (before the wire): IFS_ROOT, USER, CURLIB, TARGET.
-# Variables expanded remotely (on IBM i):        PATH.
-REMOTE_SCRIPT=$(mktemp)
-trap 'rm -f "$REMOTE_SCRIPT"' EXIT
+# What *does* work, confirmed by direct test: a single CL *program*'s own
+# sequential statements share one job/activation as normal, and a QSH
+# statement's child process (and *its* own nested system() calls, however
+# many) correctly inherit whatever CHGCURLIB that same program already ran.
+# So the fix is to make the entire build -- both makei build passes and all
+# of our explicit CRT*/DLT* steps -- run as descendants of one CHGCURLIB,
+# inside one CL program, invoked via exactly one system()/CALL.
+# ---------------------------------------------------------------------------
 
-cat > "$REMOTE_SCRIPT" << SCRIPT
+# The body: everything that actually builds the app. Unchanged in substance
+# from before this fix, except it no longer attempts its own CHGCURLIB --
+# that happens exactly once, in the CL wrapper that CALLs this via QSH.
+BODY_SCRIPT=$(mktemp)
+WRAPPER_CL=$(mktemp)
+REMOTE_SCRIPT=$(mktemp)
+trap 'rm -f "$BODY_SCRIPT" "$WRAPPER_CL" "$REMOTE_SCRIPT"' EXIT
+
+cat > "$BODY_SCRIPT" << BODY
 set -euo pipefail
 
 export PATH="/QOpenSys/pkgs/bin:\$PATH"
+export CURLIB="${CURLIB}"
 
 cd "${IFS_ROOT}"
 
-# makei resolves CURLIB from the environment -- it does not accept the CL
-# special value *CURLIB. Non-interactive SSH jobs don't expose the profile's
-# current library any other way, and DSPUSRPRF (or any screen-oriented Display
-# command) kills the SSH session outright when run without a pty -- it prints
-# its full output then the connection dies before any further script lines
-# run, with no error. So the current library comes from IBMI_CURLIB in .env
-# instead (it's a fixed, pre-provisioned value per pub400 profile, not
-# something that needs to be looked up at build time).
-export CURLIB="${CURLIB}"
 echo "Building into library \$CURLIB (target: ${TARGET})"
-
-# The SSH job's actual *CURLIB job attribute is whatever the profile's
-# pre-provisioned default is (confirmed via QSYS2.LIBRARY_LIST_INFO: it's
-# always MBPRICE1, the original single-library default, on every fresh SSH
-# job -- never whatever this build's target \$CURLIB is) unless changed here.
-# That's fine for makei's own PF/LF/DSPF/MODULE builds, which TOBi qualifies
-# explicitly with the \$CURLIB env var above rather than the job's actual
-# current library. But RPG source in this app references some externally
-# described files unqualified (e.g. TODOMAIN.RPGLE's "DCL-F TODODSPPF
-# WORKSTN", TODOBL.RPGLE's TODOPF/TODOLF) -- the compiler resolves those via
-# the job's real *LIBL, not \$CURLIB, so without this, compiling into any
-# library other than the job's actual current library silently embeds a
-# format-level ID from whatever copy of that file sits in *LIBL instead of
-# the target library's own copy, causing a runtime CPF4131 level-check
-# failure the moment the resulting program is actually run against its own
-# library's data. CHGCURLIB here makes the job's real current library match
-# \$CURLIB for the rest of this session, so unqualified compile-time file
-# resolution lands on the right copy too.
-system "CHGCURLIB CURLIB(\$CURLIB)" < /dev/null
 
 # makei build has no positional target argument -- a full build is plain
 # 'makei build'; a single target is passed via '-t <target>'.
@@ -113,9 +106,10 @@ OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null || true
 #
 # Every CL call below redirects stdin from /dev/null. Without it, the CL
 # command reads from the SAME stdin stream this whole remote script is being
-# fed through via 'bash < file' -- silently swallowing the rest of the
-# script after that command, with no error (this is also what was really
-# going on with DSPUSRPRF above, and cost a lot of debugging to pin down).
+# fed through -- silently swallowing the rest of the script after that
+# command, with no error (this is also what was really going on with
+# DSPUSRPRF in an earlier investigation, and cost a lot of debugging to pin
+# down).
 echo "Rebuilding TODOBL service program and TODOBND binding directory..."
 system "DLTSRVPGM SRVPGM(\$CURLIB/TODOBL)" < /dev/null 2>&1 || true
 system "CRTSRVPGM SRVPGM(\$CURLIB/TODOBL) MODULE(\$CURLIB/TODOBL) EXPORT(*SRCFILE) SRCSTMF('${IFS_ROOT}/QBNDSRC/TODOBL.BND')" < /dev/null
@@ -138,6 +132,46 @@ system "DLTPGM PGM(\$CURLIB/TODOMAIN)" < /dev/null 2>&1 || true
 system "CRTBNDRPG PGM(\$CURLIB/TODOMAIN) SRCSTMF('${IFS_ROOT}/QRPGLESRC/TODOMAIN.RPGLE') TGTCCSID(*JOB) DBGVIEW(*ALL) DBGENCKEY(*NONE) USRPRF(*USER) OPTION(*EVENTF) DFTACTGRP(*NO) ACTGRP(*NEW) BNDDIR(\$CURLIB/TODOBND)" < /dev/null
 
 echo "Compile complete."
+BODY
+
+BODY_REMOTE_PATH="${IFS_ROOT}/.ibmi-compile-body.sh"
+WRAPPER_REMOTE_PATH="${IFS_ROOT}/.ibmi-compile-wrapper.clle"
+
+# The CL wrapper: CHGCURLIB, then run the body via QSH as its child. Confirmed
+# live that a QSH child process (and any system() calls made from within it,
+# however many) correctly inherits a CHGCURLIB done earlier in the same CL
+# program -- unlike a standalone system()-call CHGCURLIB, which doesn't
+# survive to any later, separate system() call.
+cat > "$WRAPPER_CL" << CLSRC
+PGM
+CHGCURLIB CURLIB(${CURLIB})
+QSH CMD('bash "${BODY_REMOTE_PATH}"')
+ENDPGM
+CLSRC
+
+# Upload both files as their own SSH round-trips (plain 'cat > path', piped
+# from the local file) rather than nesting them as heredocs inside the main
+# remote script -- avoids a second layer of $ and quote escaping on top of
+# the escaping the body script and CL source already need.
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" "cat > '${BODY_REMOTE_PATH}'" < "$BODY_SCRIPT"
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" "cat > '${WRAPPER_REMOTE_PATH}'" < "$WRAPPER_CL"
+
+# Compile and run the wrapper. CRTBNDCL/CALL are separate system()-equivalent
+# invocations, which is fine here -- only the *object* (the compiled wrapper
+# program) needs to survive between them, not job attribute state, and
+# objects in a real library persist regardless of which job created them.
+# Everything that actually needs the corrected current library (both makei
+# build passes and the explicit CRT*/DLT* steps) happens inside the single
+# CALL below, as descendants of that one CHGCURLIB.
+cat > "$REMOTE_SCRIPT" << SCRIPT
+set -euo pipefail
+
+export PATH="/QOpenSys/pkgs/bin:\$PATH"
+
+system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
+system "CRTBNDCL PGM(${CURLIB}/IBMICLRUN) SRCSTMF('${WRAPPER_REMOTE_PATH}')" < /dev/null
+system "CALL PGM(${CURLIB}/IBMICLRUN)" < /dev/null
+system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
 SCRIPT
 
 ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash < "$REMOTE_SCRIPT"
