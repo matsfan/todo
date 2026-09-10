@@ -69,6 +69,25 @@ cd "${IFS_ROOT}"
 export CURLIB="${CURLIB}"
 echo "Building into library \$CURLIB (target: ${TARGET})"
 
+# The SSH job's actual *CURLIB job attribute is whatever the profile's
+# pre-provisioned default is (confirmed via QSYS2.LIBRARY_LIST_INFO: it's
+# always MBPRICE1, the original single-library default, on every fresh SSH
+# job -- never whatever this build's target \$CURLIB is) unless changed here.
+# That's fine for makei's own PF/LF/DSPF/MODULE builds, which TOBi qualifies
+# explicitly with the \$CURLIB env var above rather than the job's actual
+# current library. But RPG source in this app references some externally
+# described files unqualified (e.g. TODOMAIN.RPGLE's "DCL-F TODODSPPF
+# WORKSTN", TODOBL.RPGLE's TODOPF/TODOLF) -- the compiler resolves those via
+# the job's real *LIBL, not \$CURLIB, so without this, compiling into any
+# library other than the job's actual current library silently embeds a
+# format-level ID from whatever copy of that file sits in *LIBL instead of
+# the target library's own copy, causing a runtime CPF4131 level-check
+# failure the moment the resulting program is actually run against its own
+# library's data. CHGCURLIB here makes the job's real current library match
+# \$CURLIB for the rest of this session, so unqualified compile-time file
+# resolution lands on the right copy too.
+system "CHGCURLIB CURLIB(\$CURLIB)" < /dev/null
+
 # makei build has no positional target argument -- a full build is plain
 # 'makei build'; a single target is passed via '-t <target>'.
 #
