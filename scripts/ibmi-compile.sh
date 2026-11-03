@@ -149,12 +149,12 @@ QSH CMD('bash "${BODY_REMOTE_PATH}"')
 ENDPGM
 CLSRC
 
-# Upload both files as their own SSH round-trips (plain 'cat > path', piped
-# from the local file) rather than nesting them as heredocs inside the main
-# remote script -- avoids a second layer of $ and quote escaping on top of
-# the escaping the body script and CL source already need.
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" "cat > '${BODY_REMOTE_PATH}'" < "$BODY_SCRIPT"
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" "cat > '${WRAPPER_REMOTE_PATH}'" < "$WRAPPER_CL"
+# Upload both files via scp -- avoids the 'cat > path' stdin-pipe pattern,
+# which pub400's PASE SSH drops immediately (the server closes the connection
+# when stdin is piped rather than from a terminal in that form).
+SCP_OPTS=(-P "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
+scp "${SCP_OPTS[@]}" "$BODY_SCRIPT"  "${USER}@pub400.com:${BODY_REMOTE_PATH}"
+scp "${SCP_OPTS[@]}" "$WRAPPER_CL"   "${USER}@pub400.com:${WRAPPER_REMOTE_PATH}"
 
 # Compile and run the wrapper. CRTBNDCL/CALL are separate system()-equivalent
 # invocations, which is fine here -- only the *object* (the compiled wrapper
@@ -174,4 +174,7 @@ system "CALL PGM(${CURLIB}/IBMICLRUN)" < /dev/null
 system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
 SCRIPT
 
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash < "$REMOTE_SCRIPT"
+# Run the final script via heredoc rather than stdin pipe -- same reason as above.
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash << ENDSSH
+$(cat "$REMOTE_SCRIPT")
+ENDSSH
