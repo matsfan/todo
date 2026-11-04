@@ -16,6 +16,7 @@
      A*   *IN51  - SFLDSPCTL: display subfile control record
      A*   *IN52  - SFLCLR   : clear subfile before reload
      A*   *IN53  - SFLEND   : bottom-of-list indicator (shows "Bottom")
+     A*   *IN54  - Row 3 label: OFF="F5=Show Done", ON="F5=Hide Done"
      A*   *IN60  - ERRMSG   : error / info message overlay on TODODET
      A*
      A* Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build order.
@@ -53,6 +54,13 @@
      A                                  1  2'Todo List'
      A                                      DSPATR(HI)
      A                                  1 30'IBM i RPG Todo Application'
+     A* Row 3: instruction line. *IN54 OFF = show done available, ON = hide done.
+     A N54                              3  2'F3=Exit   F5=Show Done   F6=Add New+
+     A                                      Todo'
+     A                                      COLOR(BLU)
+     A  54                              3  2'F3=Exit   F5=Hide Done   F6=Add New+
+     A                                      Todo'
+     A                                      COLOR(BLU)
      A*  Column headings
      A                                  6  2'Opt'
      A                                      COLOR(WHT)
@@ -76,20 +84,16 @@
      A                                      COLOR(WHT)
      A*
      A*--------------------------------------------------------------------------
-     A* TODOFTR - List screen footer (rows 3 and 23). Separate record format because
+     A* TODOFTR - List screen footer (row 23). Separate record format because
      A* content at or below a subfile's own row span cannot live inside the
      A* subfile control record itself -- TODOCTL's own row 8-21 (SFLPAG) span
      A* triggers CPD7812 "Subfile control record overlaps subfile record" if
-     A* row 23 content is declared there directly. Row 3 lives here (not in
-     A* TODOCTL) so that TODOFTR2 can show "F5=Hide Done" there when active.
-     A* WRITE this alongside TODOCTL in TODOMAIN.RPGLE (see Main); both formats
-     A* need OVERLAY so writing/re-EXFMTing one doesn't erase the other.
+     A* row 23 content is declared there directly. WRITE this alongside
+     A* TODOCTL in TODOMAIN.RPGLE (see Main); both formats need OVERLAY so
+     A* writing/re-EXFMTing one doesn't erase the other from the screen.
      A*--------------------------------------------------------------------------
      A          R TODOFTR
      A                                      OVERLAY
-     A                                  3  2'F3=Exit   F5=Show Done   F6=Add New+
-     A                                      Todo'
-     A                                      COLOR(BLU)
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Show Done'
@@ -97,13 +101,10 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOFTR2 - List screen footer shown when completed todos are visible.
-     A* Shows "F5=Hide Done" on rows 3 and 23 instead of "F5=Show Done".
+     A* Identical to TODOFTR except the F5 label reads "F5=Hide Done".
      A*--------------------------------------------------------------------------
      A          R TODOFTR2
      A                                      OVERLAY
-     A                                  3  2'F3=Exit   F5=Hide Done   F6=Add New+
-     A                                      Todo'
-     A                                      COLOR(BLU)
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Hide Done'

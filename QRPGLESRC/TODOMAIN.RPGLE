@@ -26,6 +26,7 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 //   *IN51  SFLDSPCTL(show subfile control)
 //   *IN52  SFLCLR   (clear subfile)
 //   *IN53  SFLEND   (bottom of list)
+//   *IN54  Row 3 label: OFF=Show Done, ON=Hide Done (mirrors w_ShowDone)
 //   *IN60  Error message on TODODET
 //***************************************************************************
 
@@ -154,6 +155,9 @@ DCL-PROC Main;
     ELSE;
       WRITE TODOFTR;
     ENDIF;
+
+    // Set indicator so TODOCTL shows the correct F5 label on row 3
+    *IN54 = w_ShowDone;
 
     // Show list screen and wait for user input
     EXFMT TODOCTL;
