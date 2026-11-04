@@ -17,6 +17,12 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 //                --Opt 5--> mark done         --> TODOCTL
 //                --F3 ----> *end
 //
+// List screen I/O pattern (each loop pass):
+//   WRITE TODOCTL          -- full-screen clear + paint control/subfile rows
+//   WRITE TODOFTR/TODOFTR2 -- OVERLAY footer onto row 23
+//   READ  TODOCTL          -- wait for key
+// TODOCTL has no OVERLAY so the WRITE always clears stale subfile rows.
+//
 // Indicator Map:
 //   *IN03  F3=Exit
 //   *IN05  F5=Toggle show/hide completed todos
@@ -147,19 +153,23 @@ DCL-PROC Main;
 
     LoadSubfile(w_ShowDone);                   // Rebuild the subfile
 
-    // Write the appropriate footer (TODOFTR2 when showing all, TODOFTR otherwise).
-    // Both declare OVERLAY so writing one does not erase TODOCTL's rows.
+    // Set indicator so TODOCTL shows the correct F5 label on row 3
+    *IN54 = w_ShowDone;
+
+    // Write the list screen (no OVERLAY on TODOCTL, so this clears the
+    // full screen first -- stale subfile rows from a previous display
+    // are always erased, even when the subfile is now empty).
+    WRITE TODOCTL;
+
+    // Write the footer on top (OVERLAY -- does not clear TODOCTL's rows).
     IF w_ShowDone;
       WRITE TODOFTR2;
     ELSE;
       WRITE TODOFTR;
     ENDIF;
 
-    // Set indicator so TODOCTL shows the correct F5 label on row 3
-    *IN54 = w_ShowDone;
-
-    // Show list screen and wait for user input
-    EXFMT TODOCTL;
+    // Wait for user input
+    READ TODOCTL;
 
     // ---- F3 Exit -----------------------------------------------------------
     IF *IN03;

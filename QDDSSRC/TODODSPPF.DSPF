@@ -38,9 +38,12 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOCTL - Subfile control record format (the list screen)
+     A* No OVERLAY: WRITE TODOCTL clears the full screen first so stale subfile
+     A* rows from a previous display are never left on screen when the subfile
+     A* is empty. The TODOFTR/TODOFTR2 footer is written separately (with
+     A* OVERLAY) immediately after WRITE TODOCTL, before READ TODOCTL.
      A*--------------------------------------------------------------------------
      A          R TODOCTL                   SFLCTL(TODOSFL)
-     A                                      OVERLAY
      A                                      SFLSIZ(0099)
      A                                      SFLPAG(0014)
      A                                      CA03(03 'F3=Exit')
