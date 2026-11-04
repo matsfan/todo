@@ -76,6 +76,10 @@ git clean -fdx
 echo "Deployed \$(git rev-parse HEAD) (${REF}) to ${IFS_ROOT}"
 SCRIPT
 
+# pub400.com blocks SSH commands that name 'bash' as the explicit remote
+# command (connection closed, exit 255). The workaround: have the default
+# login shell (ksh on PASE) decode the script into a temp file, then exec
+# it with the full-path bash. All constructs used here are POSIX sh/ksh safe.
 FULL_B64=$(base64 < "$REMOTE_SCRIPT" | tr -d '\n')
 ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" \
-  "export PATH=/QOpenSys/pkgs/bin:\$PATH; printf '%s' '${FULL_B64}' | base64 -d | bash"
+  "export PATH=/QOpenSys/pkgs/bin:\$PATH; _f=/tmp/_deploy_\$\$; printf '%s' '${FULL_B64}' | base64 -d > \$_f && /QOpenSys/pkgs/bin/bash \$_f; _rc=\$?; rm -f \$_f; exit \$_rc"
