@@ -193,6 +193,7 @@ DCL-PROC Main;
           DeleteTodo();
         WHEN w_Option = '5';                  // Mark done
           MarkDone();
+          LEAVE;                              // Exit READC loop to reload subfile
         OTHER;
           // Unknown option - ignore
       ENDSL;
