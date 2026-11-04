@@ -22,6 +22,8 @@ CTL-OPT NOMAIN;
 //   DeleteTodoRecord     - delete a TODOPF record by ID
 //   ReadFirstTodo        - SETLL *START on TODOLF, return first non-done record
 //   ReadNextTodo         - return next non-done record from TODOLF
+//   ReadFirstTodoAll     - SETLL *START on TODOLF, return first record (any status)
+//   ReadNextTodoAll      - return next record from TODOLF regardless of TDDONE
 //***************************************************************************
 
 // ---------------------------------------------------------------------------
@@ -96,6 +98,16 @@ END-PR;
 
 DCL-PR ReadNextTodo        IND
                            EXTPROC('READNEXTTODO');
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
+
+DCL-PR ReadFirstTodoAll    IND
+                           EXTPROC('READFIRSTTODOALL');
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
+
+DCL-PR ReadNextTodoAll     IND
+                           EXTPROC('READNEXTTODOALL');
   o_Rec     LIKEDS(todoRec_t);
 END-PR;
 
@@ -326,5 +338,46 @@ DCL-PROC GetTodoById        EXPORT;
   ENDIF;
 
   RETURN w_Found;
+
+END-PROC;
+
+// ---------------------------------------------------------------------------
+// ReadFirstTodoAll - Position TODOLF to *START and return the first record
+//   regardless of TDDONE status. Returns *ON if a record was found; *OFF if
+//   the file is empty.
+// ---------------------------------------------------------------------------
+
+DCL-PROC ReadFirstTodoAll   EXPORT;
+
+  DCL-PI *N IND;
+    o_Rec     LIKEDS(todoRec_t);
+  END-PI;
+
+  SETLL *START TODOLF;
+  RETURN ReadNextTodoAll(o_Rec);
+
+END-PROC;
+
+// ---------------------------------------------------------------------------
+// ReadNextTodoAll - Read the next record from TODOLF regardless of TDDONE
+//   Returns *ON if found, *OFF at end-of-file.
+// ---------------------------------------------------------------------------
+
+DCL-PROC ReadNextTodoAll    EXPORT;
+
+  DCL-PI *N IND;
+    o_Rec     LIKEDS(todoRec_t);
+  END-PI;
+
+  READ TODOLFR;
+  IF %EOF(TODOLF);
+    RETURN *OFF;
+  ENDIF;
+
+  o_Rec.tdId   = TDID;
+  o_Rec.tdDesc = TDDESC;
+  o_Rec.tdDone = TDDONE;
+  o_Rec.tdDue  = TDDUE;
+  RETURN *ON;
 
 END-PROC;

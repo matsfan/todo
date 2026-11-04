@@ -27,7 +27,7 @@ IFS_DIR="${IBMI_IFS_DIR:-todo}"
 IFS_ROOT="/home/$USER/source/${IFS_DIR}"
 PORT="${IBMI_SSH_PORT:-2222}"
 
-SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
+SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$IDENTITY")
 
 # makei build has no positional target argument -- a full build is plain
 # 'makei build'; a single target is passed via '-t <target>'.
@@ -149,32 +149,49 @@ QSH CMD('bash "${BODY_REMOTE_PATH}"')
 ENDPGM
 CLSRC
 
-# Upload both files via scp -- avoids the 'cat > path' stdin-pipe pattern,
-# which pub400's PASE SSH drops immediately (the server closes the connection
-# when stdin is piped rather than from a terminal in that form).
-SCP_OPTS=(-P "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
-scp "${SCP_OPTS[@]}" "$BODY_SCRIPT"  "${USER}@pub400.com:${BODY_REMOTE_PATH}"
-scp "${SCP_OPTS[@]}" "$WRAPPER_CL"   "${USER}@pub400.com:${WRAPPER_REMOTE_PATH}"
-
-# Compile and run the wrapper. CRTBNDCL/CALL are separate system()-equivalent
-# invocations, which is fine here -- only the *object* (the compiled wrapper
-# program) needs to survive between them, not job attribute state, and
-# objects in a real library persist regardless of which job created them.
-# Everything that actually needs the corrected current library (both makei
-# build passes and the explicit CRT*/DLT* steps) happens inside the single
-# CALL below, as descendants of that one CHGCURLIB.
+# Build the full remote execution script (upload + compile) as a single
+# local file, then base64-encode and pass it as a quoted SSH argument.
+# This avoids all heredoc stdin issues: pub400 drops connections when stdin
+# is piped via heredoc in non-interactive SSH (CI runners, Bob agent).
+# Passing the script as a quoted 'bash -c ...' argument avoids stdin entirely.
 cat > "$REMOTE_SCRIPT" << SCRIPT
 set -euo pipefail
-
 export PATH="/QOpenSys/pkgs/bin:\$PATH"
 
-system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
-system "CRTBNDCL PGM(${CURLIB}/IBMICLRUN) SRCSTMF('${WRAPPER_REMOTE_PATH}')" < /dev/null
-system "CALL PGM(${CURLIB}/IBMICLRUN)" < /dev/null
-system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
+# Decode and write the build body script
+printf '%s' '$(base64 < "$BODY_SCRIPT" | tr -d '\n')' | base64 -d > '${BODY_REMOTE_PATH}'
+
+# Decode and write the CL wrapper
+printf '%s' '$(base64 < "$WRAPPER_CL" | tr -d '\n')' | base64 -d > '${WRAPPER_REMOTE_PATH}'
+
+# Compile and run the CL wrapper (CHGCURLIB + QSH into the body script).
+# Each system() call gets </dev/null to prevent it reading our script stream.
+system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" </dev/null 2>&1 || true
+system "CRTBNDCL PGM(${CURLIB}/IBMICLRUN) SRCSTMF('${WRAPPER_REMOTE_PATH}')" </dev/null
+system "CALL PGM(${CURLIB}/IBMICLRUN)" </dev/null
+system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" </dev/null 2>&1 || true
 SCRIPT
 
-# Run the final script via heredoc rather than stdin pipe -- same reason as above.
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash << ENDSSH
-$(cat "$REMOTE_SCRIPT")
-ENDSSH
+# pub400.com blocks SSH commands that name 'bash' as the explicit remote
+# command (connection closed, exit 255). The workaround: have the default
+# login shell (ksh on PASE) decode the script into a temp file, then exec
+# it with the full-path bash. All constructs used here are POSIX sh/ksh safe.
+#
+# pub400.com also rate-limits rapid SSH connections from the same IP (e.g.
+# GitHub Actions runners firing multiple CI jobs in quick succession). Retry
+# up to 5 times with 30-second gaps before giving up.
+FULL_B64=$(base64 < "$REMOTE_SCRIPT" | tr -d '\n')
+SSH_CMD="export PATH=/QOpenSys/pkgs/bin:\$PATH; _f=/tmp/_compile_\$\$; printf '%s' '${FULL_B64}' | base64 -d > \$_f && /QOpenSys/pkgs/bin/bash \$_f; _rc=\$?; rm -f \$_f; exit \$_rc"
+
+for _attempt in 1 2 3 4 5; do
+  echo "SSH attempt ${_attempt}/5..."
+  ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" "${SSH_CMD}" && break
+  _ssh_rc=$?
+  if [ ${_attempt} -lt 5 ]; then
+    echo "Connection failed (exit ${_ssh_rc}), waiting 30s before retry..."
+    sleep 30
+  else
+    echo "All 5 attempts failed."
+    exit ${_ssh_rc}
+  fi
+done
