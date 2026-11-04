@@ -4,6 +4,8 @@
      A* Record Formats:
      A*   TODOSFL  - Subfile record (one row per todo item)
      A*   TODOCTL  - Subfile control (list screen with headings and F-keys)
+     A*   TODOFTR  - Footer row 23 when showing incomplete todos only
+     A*   TODOFTR2 - Footer row 23 when showing all todos (done + incomplete)
      A*   TODODET  - Add / Edit detail screen
      A*   TODODEL  - Delete confirmation screen
      A*
@@ -16,7 +18,7 @@
      A*   *IN51  - SFLDSPCTL: display subfile control record
      A*   *IN52  - SFLCLR   : clear subfile before reload
      A*   *IN53  - SFLEND   : bottom-of-list indicator (shows "Bottom")
-     A*   *IN54  - Row 3 label: OFF="F5=Show Done", ON="F5=Hide Done"
+     A*   *IN54  - Row 3 label in TODOCTL: OFF="F5=Show Done", ON="F5=Hide Done"
      A*   *IN60  - ERRMSG   : error / info message overlay on TODODET
      A*
      A* Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build order.
@@ -36,8 +38,14 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOCTL - Subfile control record format (the list screen)
+     A* OVERLAY: TODOCTL is EXFMTed *after* the footer (which has no OVERLAY
+     A* and so clears the whole screen, stale subfile rows included). TODOCTL
+     A* must be the LAST format written before the read, because 5250 takes
+     A* the valid command keys (CA03/CA05/CA06/ROLLUP...) from the last
+     A* format written -- if a footer is written last, F5 is rejected.
      A*--------------------------------------------------------------------------
      A          R TODOCTL                   SFLCTL(TODOSFL)
+     A                                      OVERLAY
      A                                      SFLSIZ(0099)
      A                                      SFLPAG(0014)
      A                                      CA03(03 'F3=Exit')
@@ -83,28 +91,22 @@
      A                                      COLOR(WHT)
      A*
      A*--------------------------------------------------------------------------
-     A* TODOFTR - List screen footer (row 23). Separate record format because
-     A* content at or below a subfile's own row span cannot live inside the
-     A* subfile control record itself -- TODOCTL's own row 8-21 (SFLPAG) span
-     A* triggers CPD7812 "Subfile control record overlaps subfile record" if
-     A* row 23 content is declared there directly. WRITE this before EXFMT
-     A* TODOCTL in TODOMAIN.RPGLE (see Main); OVERLAY here means writing the
-     A* footer does not erase TODOCTL's rows, and TODOCTL's full-screen repaint
-     A* (no OVERLAY) ensures stale subfile rows are never left on screen.
+     A* TODOFTR - List screen footer (row 23) when showing incomplete todos only.
+     A* No OVERLAY on purpose: written first each pass, it clears the screen so
+     A* rows from a previous (larger) subfile never linger. TODOCTL (OVERLAY)
+     A* is then EXFMTed on top of it.
      A*--------------------------------------------------------------------------
      A          R TODOFTR
-     A                                      OVERLAY
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Show Done'
      A                                      COLOR(BLU)
      A*
      A*--------------------------------------------------------------------------
-     A* TODOFTR2 - List screen footer shown when completed todos are visible.
-     A* Identical to TODOFTR except the F5 label reads "F5=Hide Done".
+     A* TODOFTR2 - Footer row 23 when showing all todos (done + incomplete).
+     A* No OVERLAY on purpose -- same reasoning as TODOFTR.
      A*--------------------------------------------------------------------------
      A          R TODOFTR2
-     A                                      OVERLAY
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Hide Done'

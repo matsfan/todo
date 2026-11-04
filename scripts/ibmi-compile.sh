@@ -92,8 +92,17 @@ echo "Building into library \$CURLIB (target: ${TARGET})"
 # handle (DSPF/PF/LF/MODULE) -- and the second pass is what actually
 # determines success once TODOBL/TODOBND exist.
 #
+# TOBi's up-to-date check compares IFS source mtime to the QSYS object
+# creation time. After a fresh git checkout (git clean -fdx wipes .deps/),
+# the IFS files are older than any previously-compiled QSYS objects, so
+# TOBi silently skips them. Touch every source file so it appears newer
+# than any existing QSYS object -- no deletions, no lock conflicts, no
+# data loss from wiping TODOPF.
+#
 # < /dev/null here too: makei itself reads stdin, which -- same as the CL
 # calls below -- would otherwise swallow the rest of this remote script.
+echo "Touching source files to force full recompile..."
+find "${IFS_ROOT}/QDDSSRC" "${IFS_ROOT}/QRPGLESRC" "${IFS_ROOT}/QBNDSRC" -type f | xargs touch
 OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null || true
 
 # TOBi references MODULE_TO_BND_RECIPE / BND_TO_BNDDIR_RECIPE for building a
