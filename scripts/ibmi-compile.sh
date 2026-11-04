@@ -149,49 +149,30 @@ QSH CMD('bash "${BODY_REMOTE_PATH}"')
 ENDPGM
 CLSRC
 
-# Upload both files by base64-encoding them locally and decoding on the server.
-# This avoids both the stdin-pipe problem (pub400 drops the connection when stdin
-# is piped directly to an SSH command) and the quoting/escaping issues that arise
-# when embedding arbitrary shell script content in a heredoc.
-# base64 is available on both macOS (gbase64 / base64) and Linux (base64 -w0).
-BODY_B64=$(base64 < "$BODY_SCRIPT" | tr -d '\n')
-WRAPPER_B64=$(base64 < "$WRAPPER_CL" | tr -d '\n')
-
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" << ENDSSH
-set -euo pipefail
-export PATH="/QOpenSys/pkgs/bin:\$PATH"
-printf '%s' '${BODY_B64}'    | base64 -d > '${BODY_REMOTE_PATH}'
-printf '%s' '${WRAPPER_B64}' | base64 -d > '${WRAPPER_REMOTE_PATH}'
-ENDSSH
-
-# Compile and run the wrapper. CRTBNDCL/CALL are separate system()-equivalent
-# invocations, which is fine here -- only the *object* (the compiled wrapper
-# program) needs to survive between them, not job attribute state, and
-# objects in a real library persist regardless of which job created them.
-# Everything that actually needs the corrected current library (both makei
-# build passes and the explicit CRT*/DLT* steps) happens inside the single
-# CALL below, as descendants of that one CHGCURLIB.
+# Build the full remote execution script (upload + compile) as a single
+# local file, then base64-encode and pass it as a quoted SSH argument.
+# This avoids all heredoc stdin issues: pub400 drops connections when stdin
+# is piped via heredoc in non-interactive SSH (CI runners, Bob agent).
+# Passing the script as a quoted 'bash -c ...' argument avoids stdin entirely.
 cat > "$REMOTE_SCRIPT" << SCRIPT
 set -euo pipefail
-
 export PATH="/QOpenSys/pkgs/bin:\$PATH"
 
-system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
-system "CRTBNDCL PGM(${CURLIB}/IBMICLRUN) SRCSTMF('${WRAPPER_REMOTE_PATH}')" < /dev/null
-system "CALL PGM(${CURLIB}/IBMICLRUN)" < /dev/null
-system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
+# Decode and write the build body script
+printf '%s' '$(base64 < "$BODY_SCRIPT" | tr -d '\n')' | base64 -d > '${BODY_REMOTE_PATH}'
+
+# Decode and write the CL wrapper
+printf '%s' '$(base64 < "$WRAPPER_CL" | tr -d '\n')' | base64 -d > '${WRAPPER_REMOTE_PATH}'
+
+# Compile and run the CL wrapper (CHGCURLIB + QSH into the body script).
+# Each system() call gets </dev/null to prevent it reading our script stream.
+system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" </dev/null 2>&1 || true
+system "CRTBNDCL PGM(${CURLIB}/IBMICLRUN) SRCSTMF('${WRAPPER_REMOTE_PATH}')" </dev/null
+system "CALL PGM(${CURLIB}/IBMICLRUN)" </dev/null
+system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" </dev/null 2>&1 || true
 SCRIPT
 
-# Base64-encode the run script and upload+execute it in one SSH heredoc.
-# Using $(cat file) inline would cause '< /dev/null' inside the script body
-# to redirect stdin for the heredoc itself, breaking the SSH session.
-RUNNER_B64=$(base64 < "$REMOTE_SCRIPT" | tr -d '\n')
-
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" << ENDSSH
-set -euo pipefail
-export PATH="/QOpenSys/pkgs/bin:\$PATH"
-RUNNER_SCRIPT=\$(mktemp)
-printf '%s' '${RUNNER_B64}' | base64 -d > "\$RUNNER_SCRIPT"
-bash "\$RUNNER_SCRIPT"
-rm -f "\$RUNNER_SCRIPT"
-ENDSSH
+# Encode the whole script and pass it as a quoted argument -- no stdin at all.
+FULL_B64=$(base64 < "$REMOTE_SCRIPT" | tr -d '\n')
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" \
+  "export PATH=/QOpenSys/pkgs/bin:\$PATH; printf '%s' '${FULL_B64}' | base64 -d | bash"
