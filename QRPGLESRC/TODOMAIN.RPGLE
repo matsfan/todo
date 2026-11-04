@@ -18,10 +18,11 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 //                --F3 ----> *end
 //
 // List screen I/O pattern (each loop pass):
-//   WRITE TODOCTL          -- full-screen clear + paint control/subfile rows
-//   WRITE TODOFTR/TODOFTR2 -- OVERLAY footer onto row 23
-//   READ  TODOCTL          -- wait for key
-// TODOCTL has no OVERLAY so the WRITE always clears stale subfile rows.
+//   WRITE TODOFTR/TODOFTR2 -- no OVERLAY: full-screen clear + row-23 footer
+//   EXFMT TODOCTL          -- OVERLAY: paint control/subfile rows, wait for key
+// Order matters: the footer's clear removes stale subfile rows, and TODOCTL
+// must be written last because its CA/ROLL keys are only enabled if it is
+// the last format written before the read.
 //
 // Indicator Map:
 //   *IN03  F3=Exit
@@ -156,20 +157,19 @@ DCL-PROC Main;
     // Set indicator so TODOCTL shows the correct F5 label on row 3
     *IN54 = w_ShowDone;
 
-    // Write the list screen (no OVERLAY on TODOCTL, so this clears the
-    // full screen first -- stale subfile rows from a previous display
-    // are always erased, even when the subfile is now empty).
-    WRITE TODOCTL;
-
-    // Write the footer on top (OVERLAY -- does not clear TODOCTL's rows).
+    // Footer first: it has no OVERLAY, so this clears the whole screen --
+    // stale subfile rows from a previous display are always erased, even
+    // when the subfile is now empty (SFLDSP off).
     IF w_ShowDone;
       WRITE TODOFTR2;
     ELSE;
       WRITE TODOFTR;
     ENDIF;
 
-    // Wait for user input
-    READ TODOCTL;
+    // TODOCTL (OVERLAY) last, then wait for input. It MUST be the last
+    // format written: 5250 enables the command keys of the last format
+    // written, so writing the footer after TODOCTL disables F3/F5/F6.
+    EXFMT TODOCTL;
 
     // ---- F3 Exit -----------------------------------------------------------
     IF *IN03;

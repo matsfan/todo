@@ -38,12 +38,14 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOCTL - Subfile control record format (the list screen)
-     A* No OVERLAY: WRITE TODOCTL clears the full screen first so stale subfile
-     A* rows from a previous display are never left on screen when the subfile
-     A* is empty. The TODOFTR/TODOFTR2 footer is written separately (with
-     A* OVERLAY) immediately after WRITE TODOCTL, before READ TODOCTL.
+     A* OVERLAY: TODOCTL is EXFMTed *after* the footer (which has no OVERLAY
+     A* and so clears the whole screen, stale subfile rows included). TODOCTL
+     A* must be the LAST format written before the read, because 5250 takes
+     A* the valid command keys (CA03/CA05/CA06/ROLLUP...) from the last
+     A* format written -- if a footer is written last, F5 is rejected.
      A*--------------------------------------------------------------------------
      A          R TODOCTL                   SFLCTL(TODOSFL)
+     A                                      OVERLAY
      A                                      SFLSIZ(0099)
      A                                      SFLPAG(0014)
      A                                      CA03(03 'F3=Exit')
@@ -90,10 +92,11 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOFTR - List screen footer (row 23) when showing incomplete todos only.
-     A* OVERLAY so writing it does not erase TODOCTL's rows.
+     A* No OVERLAY on purpose: written first each pass, it clears the screen so
+     A* rows from a previous (larger) subfile never linger. TODOCTL (OVERLAY)
+     A* is then EXFMTed on top of it.
      A*--------------------------------------------------------------------------
      A          R TODOFTR
-     A                                      OVERLAY
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Show Done'
@@ -101,10 +104,9 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOFTR2 - Footer row 23 when showing all todos (done + incomplete).
-     A* OVERLAY so writing it does not erase TODOCTL's rows.
+     A* No OVERLAY on purpose -- same reasoning as TODOFTR.
      A*--------------------------------------------------------------------------
      A          R TODOFTR2
-     A                                      OVERLAY
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Hide Done'
