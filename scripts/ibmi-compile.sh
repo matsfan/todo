@@ -95,14 +95,20 @@ echo "Building into library \$CURLIB (target: ${TARGET})"
 # TOBi's up-to-date check compares IFS source mtime to the QSYS object
 # creation time. After a fresh git checkout (git clean -fdx wipes .deps/),
 # the IFS files are older than any previously-compiled QSYS objects, so
-# TOBi silently skips them. Touch every source file so it appears newer
-# than any existing QSYS object -- no deletions, no lock conflicts, no
-# data loss from wiping TODOPF.
+# TOBi silently skips them. Touch source files so they appear newer than
+# any existing QSYS object.
+#
+# Physical files (*.PF) are deliberately EXCLUDED: rebuilding a PF runs
+# CRTPF, which replaces the file and DESTROYS ALL ITS DATA. Touching
+# TODOPF.PF wiped the todo data in MBPRICE1/MBPRICE2 on every build. A PF
+# is left alone unless it doesn't exist yet. Schema changes to an existing
+# PF need a deliberate, data-preserving migration (e.g. CHGPF), not a
+# routine build.
 #
 # < /dev/null here too: makei itself reads stdin, which -- same as the CL
 # calls below -- would otherwise swallow the rest of this remote script.
-echo "Touching source files to force full recompile..."
-find "${IFS_ROOT}/QDDSSRC" "${IFS_ROOT}/QRPGLESRC" "${IFS_ROOT}/QBNDSRC" -type f | xargs touch
+echo "Touching non-PF source files to force recompile (data files untouched)..."
+find "${IFS_ROOT}/QDDSSRC" "${IFS_ROOT}/QRPGLESRC" "${IFS_ROOT}/QBNDSRC" -type f ! -name '*.PF' | xargs touch
 OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null || true
 
 # TOBi references MODULE_TO_BND_RECIPE / BND_TO_BNDDIR_RECIPE for building a
