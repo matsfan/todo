@@ -34,8 +34,8 @@ trips you up (it will — that's normal, see the primer's §7 note about it).
 ## Before you start
 
 - Make sure you can already deploy, compile, and run the app as it stands
-  today — run `bash .bob/hooks/ibmi-post-stop.sh` once first if you haven't,
-  and check `.bob/logs/ibmi-build.log` for a clean build, so you know a
+  today — push a branch once first if you haven't, and check its **Deploy
+  to dev library** run in the GitHub Actions tab for a clean build, so you know a
   failed build during this tutorial is *your* change and not a pre-existing
   problem. Then `CALL *CURLIB/TODOMAIN` to confirm it actually runs.
 - **There's one loop, not a choice to make.** There's no server-side source
@@ -46,16 +46,13 @@ trips you up (it will — that's normal, see the primer's §7 note about it).
   1. Edit files under `QDDSSRC/`/`QRPGLESRC/` in your local checkout, same
      as editing any other git-tracked source.
   2. Commit to a branch, **then push it to GitHub.** This step is easy to
-     forget and will silently sink you if you do: `scripts/ibmi-deploy.sh
-     <git-ref>` works by having pub400 itself run `git fetch origin` and
-     check out `origin/<git-ref>` — it deploys whatever's on GitHub, not
-     whatever's sitting locally uncommitted or unpushed on your machine. If
-     you compile and get suspiciously old behavior, check whether you
-     actually pushed.
-  3. Run `bash .bob/hooks/ibmi-post-stop.sh` — or, if you want the two
-     steps separately, `bash scripts/ibmi-deploy.sh <your-branch>` then
-     `bash scripts/ibmi-compile.sh` — and read `.bob/logs/ibmi-build.log`
-     for compile errors. If you need more detail than the log shows, a
+     forget and will silently sink you if you do: the build only ever sees
+     what's on GitHub — pub400 itself runs `git fetch origin` and checks out
+     that commit, never whatever's sitting locally uncommitted or unpushed
+     on your machine.
+  3. The push triggers **Deploy to dev library** (`deploy-dev.yml`), which
+     deploys and compiles your branch into `MBPRICE1`. Read that run's log
+     in the GitHub Actions tab for compile errors. If you need more detail than the log shows, a
      read-only SSH session to inspect an already-produced `.evfevent` file
      is fine (see [`CLAUDE.md`](../CLAUDE.md)) — just never substitute SSH
      for the deploy/compile step itself.
@@ -90,8 +87,8 @@ value that spells out the code meanings, the same way `TDDONE`'s does.
 SQL Server, `CRTPF` recompiling over an *existing* file object on IBM i
 will not silently add a column and keep your data. On this project's
 dev library (`MBPRICE1`) there's no real data to protect, so the normal
-push-then-build loop (push your branch, then `bash
-.bob/hooks/ibmi-post-stop.sh`, per "Before you start") is all you need —
+push-then-build loop (push your branch and let the dev workflow build it,
+per "Before you start") is all you need —
 the compile step recreates `TODOPF` from the updated source. Two things
 worth knowing regardless, since you'll hit this pattern again on a real
 IBM i project:
@@ -294,10 +291,8 @@ command that should then run clean.
 
 ## Checkpoint 6 — Understand the rebuild, then let the script do it
 
-Once all the source changes above are done: push your branch, then run
-`bash .bob/hooks/ibmi-post-stop.sh` (or `scripts/ibmi-deploy.sh
-<your-branch>` followed by `scripts/ibmi-compile.sh`) and read
-`.bob/logs/ibmi-build.log`. **You do not hand-run any compile commands** —
+Once all the source changes above are done: push your branch and read the
+**Deploy to dev library** run's log in the GitHub Actions tab. **You do not hand-run any compile commands** —
 `scripts/ibmi-compile.sh` is the only supported way to build this project,
 and it always does a full build (see [`CLAUDE.md`](../CLAUDE.md) and
 [`AGENTS.md`](../AGENTS.md#compile-commands)).

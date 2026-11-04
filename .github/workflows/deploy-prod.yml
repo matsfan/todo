@@ -1,0 +1,82 @@
+name: Deploy to production library
+
+# Installs a commit from main into the MBPRICEB production library on pub400,
+# via the same scripts/ibmi-deploy.sh + scripts/ibmi-compile.sh used by the
+# dev and test pipelines (see AGENTS.md -- these are the only permitted way to
+# deploy/compile against pub400).
+#
+# Manual only: there is no push trigger. Start it from the Actions tab
+# ("Run workflow", branch main). The "prod" GitHub Environment then holds the
+# job until a required reviewer approves it, and only allows the main branch.
+#
+# Safety checks before anything touches pub400:
+#   - the commit must be on main
+#   - "Deploy to test library" must have succeeded for that exact commit, so
+#     production only ever gets a build that already passed in MBPRICE2
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy (must be on main and already deployed to test). Leave blank for the latest main."
+        required: false
+        default: ""
+
+concurrency:
+  group: ibmi-prod-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy-and-compile:
+    runs-on: ubuntu-latest
+    # Library + IFS checkout come from the "prod" GitHub Environment
+    # (Settings -> Environments): IBMI_CURLIB=MBPRICEB, IBMI_IFS_DIR=todo-prod.
+    # That environment requires reviewer approval and is limited to main.
+    environment: prod
+    env:
+      IBMI_USER: ${{ secrets.IBMI_USER }}
+      IBMI_CURLIB: ${{ vars.IBMI_CURLIB }}
+      IBMI_IFS_DIR: ${{ vars.IBMI_IFS_DIR }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and check the commit to deploy
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REQ="${INPUT_SHA:-$GITHUB_SHA}"
+          SHA=$(git rev-parse --verify "${REQ}^{commit}") || {
+            echo "::error::'${REQ}' is not a commit in this repository."; exit 1; }
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::${SHA} is not on main. Production only takes commits from main."
+            exit 1
+          fi
+          PASSED=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-test.yml/runs?head_sha=${SHA}&status=success" -q '.total_count')
+          if [ "${PASSED:-0}" -lt 1 ]; then
+            echo "::error::No successful 'Deploy to test library' run for ${SHA}. Deploy it to test (MBPRICE2) first."
+            exit 1
+          fi
+          echo "Deploying ${SHA} ($(git log -1 --format=%s "$SHA")) to ${IBMI_CURLIB}"
+          echo "DEPLOY_SHA=${SHA}" >> "$GITHUB_ENV"
+
+      - name: Write CI SSH identity
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.IBMI_SSH_KEY }}" > ~/.ssh/ibmi_ci_key
+          chmod 600 ~/.ssh/ibmi_ci_key
+          echo "IBMI_IDENTITY=$HOME/.ssh/ibmi_ci_key" >> "$GITHUB_ENV"
+
+      - name: Deploy to ${{ vars.IBMI_CURLIB }} (production library)
+        run: bash scripts/ibmi-deploy.sh "$DEPLOY_SHA"
+
+      - name: Compile in ${{ vars.IBMI_CURLIB }} (production library)
+        run: bash scripts/ibmi-compile.sh
