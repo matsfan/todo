@@ -149,12 +149,20 @@ QSH CMD('bash "${BODY_REMOTE_PATH}"')
 ENDPGM
 CLSRC
 
-# Upload both files via scp -- avoids the 'cat > path' stdin-pipe pattern,
-# which pub400's PASE SSH drops immediately (the server closes the connection
-# when stdin is piped rather than from a terminal in that form).
-SCP_OPTS=(-P "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
-scp "${SCP_OPTS[@]}" "$BODY_SCRIPT"  "${USER}@pub400.com:${BODY_REMOTE_PATH}"
-scp "${SCP_OPTS[@]}" "$WRAPPER_CL"   "${USER}@pub400.com:${WRAPPER_REMOTE_PATH}"
+# Upload both files by base64-encoding them locally and decoding on the server.
+# This avoids both the stdin-pipe problem (pub400 drops the connection when stdin
+# is piped directly to an SSH command) and the quoting/escaping issues that arise
+# when embedding arbitrary shell script content in a heredoc.
+# base64 is available on both macOS (gbase64 / base64) and Linux (base64 -w0).
+BODY_B64=$(base64 < "$BODY_SCRIPT" | tr -d '\n')
+WRAPPER_B64=$(base64 < "$WRAPPER_CL" | tr -d '\n')
+
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash << ENDSSH
+set -euo pipefail
+export PATH="/QOpenSys/pkgs/bin:\$PATH"
+printf '%s' '${BODY_B64}'    | base64 -d > '${BODY_REMOTE_PATH}'
+printf '%s' '${WRAPPER_B64}' | base64 -d > '${WRAPPER_REMOTE_PATH}'
+ENDSSH
 
 # Compile and run the wrapper. CRTBNDCL/CALL are separate system()-equivalent
 # invocations, which is fine here -- only the *object* (the compiled wrapper
