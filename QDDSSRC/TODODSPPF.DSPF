@@ -53,9 +53,6 @@
      A                                  1  2'Todo List'
      A                                      DSPATR(HI)
      A                                  1 30'IBM i RPG Todo Application'
-     A                                  3  2'F3=Exit   F5=Show Done   F6=Add New+
-     A                                      Todo'
-     A                                      COLOR(BLU)
      A*  Column headings
      A                                  6  2'Opt'
      A                                      COLOR(WHT)
@@ -79,16 +76,20 @@
      A                                      COLOR(WHT)
      A*
      A*--------------------------------------------------------------------------
-     A* TODOFTR - List screen footer (row 23). Separate record format because
+     A* TODOFTR - List screen footer (rows 3 and 23). Separate record format because
      A* content at or below a subfile's own row span cannot live inside the
      A* subfile control record itself -- TODOCTL's own row 8-21 (SFLPAG) span
      A* triggers CPD7812 "Subfile control record overlaps subfile record" if
-     A* row 23 content is declared there directly. WRITE this alongside
-     A* TODOCTL in TODOMAIN.RPGLE (see Main); both formats need OVERLAY so
-     A* writing/re-EXFMTing one doesn't erase the other from the screen.
+     A* row 23 content is declared there directly. Row 3 lives here (not in
+     A* TODOCTL) so that TODOFTR2 can show "F5=Hide Done" there when active.
+     A* WRITE this alongside TODOCTL in TODOMAIN.RPGLE (see Main); both formats
+     A* need OVERLAY so writing/re-EXFMTing one doesn't erase the other.
      A*--------------------------------------------------------------------------
      A          R TODOFTR
      A                                      OVERLAY
+     A                                  3  2'F3=Exit   F5=Show Done   F6=Add New+
+     A                                      Todo'
+     A                                      COLOR(BLU)
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Show Done'
@@ -96,10 +97,13 @@
      A*
      A*--------------------------------------------------------------------------
      A* TODOFTR2 - List screen footer shown when completed todos are visible.
-     A* Identical to TODOFTR except the F5 label reads "F5=Hide Done".
+     A* Shows "F5=Hide Done" on rows 3 and 23 instead of "F5=Show Done".
      A*--------------------------------------------------------------------------
      A          R TODOFTR2
      A                                      OVERLAY
+     A                                  3  2'F3=Exit   F5=Hide Done   F6=Add New+
+     A                                      Todo'
+     A                                      COLOR(BLU)
      A                                 23  2'Valid options: 2=Edit  +
      A                                      4=Delete  5=Mark Done  +
      A                                      F5=Hide Done'
