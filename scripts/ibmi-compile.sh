@@ -92,8 +92,19 @@ echo "Building into library \$CURLIB (target: ${TARGET})"
 # handle (DSPF/PF/LF/MODULE) -- and the second pass is what actually
 # determines success once TODOBL/TODOBND exist.
 #
+# TOBi's up-to-date check compares IFS source mtime to the QSYS object
+# creation time. After a fresh git checkout (git clean -fdx wipes .deps/),
+# the IFS files are older than any previously-compiled QSYS objects, so
+# TOBi silently skips them. Pre-delete the DDS objects so TOBi is forced
+# to rebuild them every time.
+#
 # < /dev/null here too: makei itself reads stdin, which -- same as the CL
 # calls below -- would otherwise swallow the rest of this remote script.
+echo "Deleting DDS objects to force recompile..."
+system "DLTF FILE(\$CURLIB/TODODSPPF)" < /dev/null 2>&1 || true
+system "DLTF FILE(\$CURLIB/TODOLF)"    < /dev/null 2>&1 || true
+system "DLTF FILE(\$CURLIB/TODOPF)"    < /dev/null 2>&1 || true
+system "DLTMOD MODULE(\$CURLIB/TODOBL)" < /dev/null 2>&1 || true
 OPT=*EVENTF makei build${MAKEI_TARGET_FLAG} < /dev/null || true
 
 # TOBi references MODULE_TO_BND_RECIPE / BND_TO_BNDDIR_RECIPE for building a
