@@ -26,7 +26,7 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 //   *IN51  SFLDSPCTL(show subfile control)
 //   *IN52  SFLCLR   (clear subfile)
 //   *IN53  SFLEND   (bottom of list)
-//   *IN54  Row 3+23 labels: OFF=Show Done, ON=Hide Done (mirrors w_ShowDone)
+//   *IN54  Row 3 label: OFF=Show Done, ON=Hide Done (mirrors w_ShowDone)
 //   *IN60  Error message on TODODET
 //***************************************************************************
 
@@ -147,7 +147,15 @@ DCL-PROC Main;
 
     LoadSubfile(w_ShowDone);                   // Rebuild the subfile
 
-    // Set indicator so TODOCTL shows the correct F5 label on rows 3 and 23
+    // Write the appropriate footer (TODOFTR2 when showing all, TODOFTR otherwise).
+    // Both declare OVERLAY so writing one does not erase TODOCTL's rows.
+    IF w_ShowDone;
+      WRITE TODOFTR2;
+    ELSE;
+      WRITE TODOFTR;
+    ENDIF;
+
+    // Set indicator so TODOCTL shows the correct F5 label on row 3
     *IN54 = w_ShowDone;
 
     // Show list screen and wait for user input
@@ -271,6 +279,12 @@ DCL-PROC LoadSubfile;
   // Step 3: Display the subfile (only if rows were written)
   IF w_MaxRrn > 0;
     *IN50 = *ON;                              // SFLDSP on
+  ELSE;
+    // No rows -- write TODOCTL with SFLDSPCTL on and SFLDSP off so the
+    // terminal repaints rows 8-21 as blank, clearing any previously
+    // displayed subfile rows left on screen from the prior EXFMT.
+    *IN51 = *ON;
+    WRITE TODOCTL;
   ENDIF;
   *IN51 = *ON;                                // SFLDSPCTL on
   *IN53 = *ON;                                // SFLEND - show "More..." / "Bottom"
