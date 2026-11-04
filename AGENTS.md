@@ -15,11 +15,12 @@ QDDSSRC/            ← DDS source, pulled directly onto the IFS on pub400 via `
 QRPGLESRC/          ← RPG source, same git-based deploy — no source physical file involved
 QBNDSRC/            ← Binder source (TOBi requires this to build a *SRVPGM; see Compile Commands)
 scripts/            ← ibmi-deploy.sh / ibmi-compile.sh — the only permitted way to touch pub400
-.github/workflows/  ← deploy-test.yml: auto-deploys + compiles MBPRICE2 on every push to main
+.github/workflows/  ← deploy-dev.yml: deploys + compiles MBPRICE1 on push to any branch except main
+                      deploy-test.yml: deploys + compiles MBPRICE2 on every push to main
 .bob/               ← Bob's rule files (rules-agent/, rules-plan/, rules-ask/), the Stop hook
                       (hooks/ibmi-post-stop.sh) and its build log (logs/ibmi-build.log)
-.env / .env.example ← deploy/compile credentials (IBMI_USER, IBMI_IDENTITY, IBMI_CURLIB); .env
-                      is git-ignored, .env.example is the committed template
+.env / .env.example ← deploy/compile credentials for local manual use (IBMI_USER, IBMI_IDENTITY,
+                      IBMI_CURLIB, IBMI_IFS_DIR); .env is git-ignored, .env.example is the template
 docs/               ← Human-readable docs only (not uploaded to IBM i)
 iproj.json          ← TOBi project config (target library, build command)
 Rules.mk            ← TOBi build rules (root + one per source directory)
@@ -35,9 +36,11 @@ All compile commands target **`*CURLIB`**, not a hardcoded library name. Library
 restricted on pub400.com — each profile is pre-provisioned with its own current library.
 
 **Three libraries, one profile**: `MBPRICE1` (dev), `MBPRICE2` (test), `MBPRICEB` (production).
-Local/interactive work (including Bob's post-stop hook) targets `MBPRICE1`. `MBPRICE2` is updated
-automatically on every push to `main` by `.github/workflows/deploy-test.yml` — never deploy or
-compile into it by hand. `MBPRICEB` is updated manually, by separate instruction only.
+`MBPRICE1` is updated automatically on every push to any branch except `main` by
+`.github/workflows/deploy-dev.yml` (IFS directory: `todo-dev`). `MBPRICE2` is updated automatically
+on every push to `main` by `.github/workflows/deploy-test.yml` (IFS directory: `todo-test`) —
+never deploy or compile into either by hand. `MBPRICEB` is updated manually, by separate
+instruction only.
 
 **Qualifying `CALL` alone does not select which library's data you hit.** Files in `TODOBL`
 are declared unqualified and resolve at `OPEN` time via the job's current-library slot, independent
@@ -77,12 +80,15 @@ Run tests: `RUCALLTST TSTPGM(*CURLIB/TODOTEST)` — currently blocked, not avail
 
 ## Deploy & Compile (triggering)
 
-After finishing implementation work, deploy and compile are handled automatically by the `Stop`
-hook (`.bob/hooks/ibmi-post-stop.sh`). To trigger manually mid-session:
-```
-bash .bob/hooks/ibmi-post-stop.sh
-```
-Build output is appended to `.bob/logs/ibmi-build.log`.
+Deploy and compile are handled entirely by GitHub Actions CI — the Bob Stop hook is a no-op.
+
+| Push target | Workflow | IFS directory | Compiled into |
+|---|---|---|---|
+| any branch except `main` | `deploy-dev.yml` | `todo-dev` | `MBPRICE1` |
+| `main` | `deploy-test.yml` | `todo-test` | `MBPRICE2` |
+
+To trigger a build: push your branch. The relevant workflow will deploy the commit to pub400
+and run `scripts/ibmi-compile.sh` automatically. Build output appears in the Actions run log.
 
 ## Architecture
 
