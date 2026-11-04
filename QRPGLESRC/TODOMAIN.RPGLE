@@ -158,6 +158,15 @@ DCL-PROC Main;
     // Set indicator so TODOCTL shows the correct F5 label on row 3
     *IN54 = w_ShowDone;
 
+    // When the subfile is empty, write TODOCTL before EXFMT so the terminal
+    // receives a repaint of the control record with SFLDSP off -- this clears
+    // any subfile rows (8-21) left on screen from the previous EXFMT.
+    // With OVERLAY on TODOCTL, EXFMT alone does not send blank rows to the
+    // terminal when SFLDSP (*IN50) is off.
+    IF w_MaxRrn = 0;
+      WRITE TODOCTL;
+    ENDIF;
+
     // Show list screen and wait for user input
     EXFMT TODOCTL;
 
@@ -279,12 +288,6 @@ DCL-PROC LoadSubfile;
   // Step 3: Display the subfile (only if rows were written)
   IF w_MaxRrn > 0;
     *IN50 = *ON;                              // SFLDSP on
-  ELSE;
-    // No rows -- write TODOCTL with SFLDSPCTL on and SFLDSP off so the
-    // terminal repaints rows 8-21 as blank, clearing any previously
-    // displayed subfile rows left on screen from the prior EXFMT.
-    *IN51 = *ON;
-    WRITE TODOCTL;
   ENDIF;
   *IN51 = *ON;                                // SFLDSPCTL on
   *IN53 = *ON;                                // SFLEND - show "More..." / "Bottom"
