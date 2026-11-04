@@ -27,7 +27,7 @@ IFS_DIR="${IBMI_IFS_DIR:-todo}"
 IFS_ROOT="/home/$USER/source/${IFS_DIR}"
 PORT="${IBMI_SSH_PORT:-2222}"
 
-SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
+SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$IDENTITY")
 
 # makei build has no positional target argument -- a full build is plain
 # 'makei build'; a single target is passed via '-t <target>'.
@@ -157,7 +157,7 @@ CLSRC
 BODY_B64=$(base64 < "$BODY_SCRIPT" | tr -d '\n')
 WRAPPER_B64=$(base64 < "$WRAPPER_CL" | tr -d '\n')
 
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash << ENDSSH
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" << ENDSSH
 set -euo pipefail
 export PATH="/QOpenSys/pkgs/bin:\$PATH"
 printf '%s' '${BODY_B64}'    | base64 -d > '${BODY_REMOTE_PATH}'
@@ -182,7 +182,16 @@ system "CALL PGM(${CURLIB}/IBMICLRUN)" < /dev/null
 system "DLTPGM PGM(${CURLIB}/IBMICLRUN)" < /dev/null 2>&1 || true
 SCRIPT
 
-# Run the final script via heredoc rather than stdin pipe -- same reason as above.
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" bash << ENDSSH
-$(cat "$REMOTE_SCRIPT")
+# Base64-encode the run script and upload+execute it in one SSH heredoc.
+# Using $(cat file) inline would cause '< /dev/null' inside the script body
+# to redirect stdin for the heredoc itself, breaking the SSH session.
+RUNNER_B64=$(base64 < "$REMOTE_SCRIPT" | tr -d '\n')
+
+ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" << ENDSSH
+set -euo pipefail
+export PATH="/QOpenSys/pkgs/bin:\$PATH"
+RUNNER_SCRIPT=\$(mktemp)
+printf '%s' '${RUNNER_B64}' | base64 -d > "\$RUNNER_SCRIPT"
+bash "\$RUNNER_SCRIPT"
+rm -f "\$RUNNER_SCRIPT"
 ENDSSH

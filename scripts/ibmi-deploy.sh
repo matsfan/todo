@@ -27,7 +27,7 @@ IFS_ROOT="/home/$USER/source/${IFS_DIR}"
 REPO_URL="https://github.com/matsfan/todo.git"
 PORT="${IBMI_SSH_PORT:-2222}"
 
-SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "$IDENTITY")
+SSH_OPTS=(-p "$PORT" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$IDENTITY")
 
 # Pulls source directly from GitHub on pub400 itself (git is available at
 # /QOpenSys/pkgs/bin/git there) instead of scp-ing local files. This means what
