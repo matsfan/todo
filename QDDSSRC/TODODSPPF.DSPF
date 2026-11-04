@@ -9,6 +9,7 @@
      A*
      A* Indicator Map:
      A*   *IN03  - F3  pressed (Exit)
+     A*   *IN05  - F5  pressed (Toggle show/hide completed todos)
      A*   *IN06  - F6  pressed (Add new todo)
      A*   *IN12  - F12 pressed (Cancel)
      A*   *IN50  - SFLDSP   : display subfile records (off = hide rows)
@@ -40,6 +41,7 @@
      A                                      SFLSIZ(0099)
      A                                      SFLPAG(0014)
      A                                      CA03(03 'F3=Exit')
+     A                                      CA05(05 'F5=Show Done')
      A                                      CA06(06 'F6=Add')
      A                                      ROLLUP(25 'Page Down')
      A                                      ROLLDOWN(26 'Page Up')
@@ -51,7 +53,8 @@
      A                                  1  2'Todo List'
      A                                      DSPATR(HI)
      A                                  1 30'IBM i RPG Todo Application'
-     A                                  3  2'F3=Exit   F6=Add New Todo'
+     A                                  3  2'F3=Exit   F5=Show Done   F6=Add New+
+     A                                      Todo'
      A                                      COLOR(BLU)
      A*  Column headings
      A                                  6  2'Opt'
@@ -87,7 +90,19 @@
      A          R TODOFTR
      A                                      OVERLAY
      A                                 23  2'Valid options: 2=Edit  +
-     A                                      4=Delete  5=Mark Done'
+     A                                      4=Delete  5=Mark Done  +
+     A                                      F5=Show Done'
+     A                                      COLOR(BLU)
+     A*
+     A*--------------------------------------------------------------------------
+     A* TODOFTR2 - List screen footer shown when completed todos are visible.
+     A* Identical to TODOFTR except the F5 label reads "F5=Hide Done".
+     A*--------------------------------------------------------------------------
+     A          R TODOFTR2
+     A                                      OVERLAY
+     A                                 23  2'Valid options: 2=Edit  +
+     A                                      4=Delete  5=Mark Done  +
+     A                                      F5=Hide Done'
      A                                      COLOR(BLU)
      A*
      A*--------------------------------------------------------------------------

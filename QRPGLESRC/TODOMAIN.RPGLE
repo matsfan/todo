@@ -19,6 +19,7 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 //
 // Indicator Map:
 //   *IN03  F3=Exit
+//   *IN05  F5=Toggle show/hide completed todos
 //   *IN06  F6=Add new
 //   *IN12  F12=Cancel
 //   *IN50  SFLDSP   (show subfile rows)
@@ -52,6 +53,7 @@ DCL-S w_Mode     CHAR(3)     INZ('');         // 'ADD' or 'EDT'
 DCL-S w_Option   CHAR(1)     INZ('');         // User option from subfile row
 DCL-S w_SelId    PACKED(5:0) INZ(0);         // ID of selected todo
 DCL-S w_Today    DATE        INZ(*SYS);       // Today's date for new todos
+DCL-S w_ShowDone IND         INZ(*OFF);       // *ON = show completed todos
 
 // ---------------------------------------------------------------------------
 // Prototypes for TODOBL exported procedures
@@ -109,6 +111,16 @@ DCL-PR ReadNextTodo        IND
   o_Rec     LIKEDS(todoRec_t);
 END-PR;
 
+DCL-PR ReadFirstTodoAll    IND
+                           EXTPROC('READFIRSTTODOALL');
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
+
+DCL-PR ReadNextTodoAll     IND
+                           EXTPROC('READNEXTTODOALL');
+  o_Rec     LIKEDS(todoRec_t);
+END-PR;
+
 DCL-PR GetTodoById         IND
                            EXTPROC('GETTODOBYID');
   i_Id      PACKED(5:0) CONST;
@@ -132,14 +144,16 @@ DCL-PROC Main;
 
   DOU *IN03;                                  // Loop until F3=Exit
 
-    LoadSubfile();                             // Rebuild the subfile
+    LoadSubfile(w_ShowDone);                   // Rebuild the subfile
 
-    // TODOFTR is a separate record format from TODOCTL because content at
-    // or below a subfile's own row span (rows 8-21 here) can't live inside
-    // the subfile control record itself - see QDDSSRC/TODODSPPF.DSPF.
-    // Both records declare OVERLAY so writing/re-EXFMTing one doesn't erase
-    // the other off the screen.
-    WRITE TODOFTR;
+    // Write the appropriate footer (TODOFTR2 when completed todos are shown,
+    // TODOFTR otherwise). Both declare OVERLAY so writing one doesn't erase
+    // the other. See QDDSSRC/TODODSPPF.DSPF for the separate-format rationale.
+    IF w_ShowDone;
+      WRITE TODOFTR2;
+    ELSE;
+      WRITE TODOFTR;
+    ENDIF;
 
     // Show list screen and wait for user input
     EXFMT TODOCTL;
@@ -147,6 +161,12 @@ DCL-PROC Main;
     // ---- F3 Exit -----------------------------------------------------------
     IF *IN03;
       LEAVE;
+    ENDIF;
+
+    // ---- F5 Toggle show/hide completed todos -------------------------------
+    IF *IN05;
+      w_ShowDone = NOT w_ShowDone;
+      ITER;
     ENDIF;
 
     // ---- F6 Add new todo ---------------------------------------------------
@@ -192,12 +212,19 @@ DCL-PROC Main;
 END-PROC;
 
 // ---------------------------------------------------------------------------
-// LoadSubfile - Clear and reload the subfile with incomplete todos
+// LoadSubfile - Clear and reload the subfile.
+//   i_ShowDone = *ON  : load all todos (done and not-done)
+//   i_ShowDone = *OFF : load only incomplete todos (default)
 // ---------------------------------------------------------------------------
 
 DCL-PROC LoadSubfile;
 
+  DCL-PI *N;
+    i_ShowDone  IND CONST;
+  END-PI;
+
   DCL-DS l_Rec LIKEDS(todoRec_t);
+  DCL-S  l_HasRecord IND;
 
   // Step 1: Clear the subfile
   *IN50 = *OFF;                               // SFLDSP   off = hide rows
@@ -209,19 +236,36 @@ DCL-PROC LoadSubfile;
   w_Rrn    = 0;
   w_MaxRrn = 0;
 
-  // Step 2: Read all non-done records via TODOBL
-  IF ReadFirstTodo(l_Rec);
+  // Step 2: Read records via TODOBL (filtered or all depending on toggle)
+  IF i_ShowDone;
+    l_HasRecord = ReadFirstTodoAll(l_Rec);
+  ELSE;
+    l_HasRecord = ReadFirstTodo(l_Rec);
+  ENDIF;
+
+  IF l_HasRecord;
     DOW *ON;
       w_Rrn  += 1;
       SFLOPT  = ' ';
       TDID    = l_Rec.tdId;
       TDDESC  = l_Rec.tdDesc;
-      TDDONE  = l_Rec.tdDone;
+      // Display '*' for done items, ' ' for incomplete
+      IF l_Rec.tdDone = '1';
+        TDDONE = '*';
+      ELSE;
+        TDDONE = ' ';
+      ENDIF;
       TDDUE   = l_Rec.tdDue;
       WRITE TODOSFL;
 
-      IF NOT ReadNextTodo(l_Rec);
-        LEAVE;
+      IF i_ShowDone;
+        IF NOT ReadNextTodoAll(l_Rec);
+          LEAVE;
+        ENDIF;
+      ELSE;
+        IF NOT ReadNextTodo(l_Rec);
+          LEAVE;
+        ENDIF;
       ENDIF;
     ENDDO;
   ENDIF;
