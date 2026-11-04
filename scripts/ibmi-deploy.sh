@@ -80,6 +80,22 @@ SCRIPT
 # command (connection closed, exit 255). The workaround: have the default
 # login shell (ksh on PASE) decode the script into a temp file, then exec
 # it with the full-path bash. All constructs used here are POSIX sh/ksh safe.
+#
+# pub400.com also rate-limits rapid SSH connections from the same IP (e.g.
+# GitHub Actions runners firing multiple CI jobs in quick succession). Retry
+# up to 5 times with 30-second gaps before giving up.
 FULL_B64=$(base64 < "$REMOTE_SCRIPT" | tr -d '\n')
-ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" \
-  "export PATH=/QOpenSys/pkgs/bin:\$PATH; _f=/tmp/_deploy_\$\$; printf '%s' '${FULL_B64}' | base64 -d > \$_f && /QOpenSys/pkgs/bin/bash \$_f; _rc=\$?; rm -f \$_f; exit \$_rc"
+SSH_CMD="export PATH=/QOpenSys/pkgs/bin:\$PATH; _f=/tmp/_deploy_\$\$; printf '%s' '${FULL_B64}' | base64 -d > \$_f && /QOpenSys/pkgs/bin/bash \$_f; _rc=\$?; rm -f \$_f; exit \$_rc"
+
+for _attempt in 1 2 3 4 5; do
+  echo "SSH attempt ${_attempt}/5..."
+  ssh "${SSH_OPTS[@]}" "${USER}@pub400.com" "${SSH_CMD}" && break
+  _ssh_rc=$?
+  if [ ${_attempt} -lt 5 ]; then
+    echo "Connection failed (exit ${_ssh_rc}), waiting 30s before retry..."
+    sleep 30
+  else
+    echo "All 5 attempts failed."
+    exit ${_ssh_rc}
+  fi
+done
