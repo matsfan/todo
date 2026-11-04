@@ -9,6 +9,8 @@ CTL-OPT DFTACTGRP(*NO) ACTGRP(*NEW);
 // Data     : delegated entirely to TODOBL service program
 //
 // Built by scripts/ibmi-compile.sh (TOBi); see AGENTS.md for build/dependency order.
+// Data in TODOPF survives rebuilds: the compile script never recreates an
+// existing *.PF (see scripts/ibmi-compile.sh).
 //
 // Screen Flow:
 //   TODOCTL (list) --F6---> TODODET (add)  --> TODOCTL
