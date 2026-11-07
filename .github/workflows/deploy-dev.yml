@@ -4,7 +4,7 @@ name: Deploy to dev library
 # pub400, via the same scripts/ibmi-deploy.sh + scripts/ibmi-compile.sh used
 # by the test pipeline (see AGENTS.md — these are the only permitted way to
 # deploy/compile against pub400). Runs against its own IFS checkout
-# (IBMI_IFS_DIR=todo-dev) so it never resets/cleans the todo-test checkout
+# (todo-dev, from the dev GitHub Environment) so it never resets/cleans the todo-test checkout
 # used by the MBPRICE2 pipeline on main.
 #
 # workflow_dispatch is kept alongside the push trigger so a run can be
@@ -19,14 +19,16 @@ concurrency:
   group: ibmi-dev-deploy-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  IBMI_USER: ${{ secrets.IBMI_USER }}
-  IBMI_CURLIB: MBPRICE1
-  IBMI_IFS_DIR: todo-dev
-
 jobs:
   deploy-and-compile:
     runs-on: ubuntu-latest
+    # Library + IFS checkout come from the "dev" GitHub Environment
+    # (Settings -> Environments): IBMI_CURLIB=MBPRICE1, IBMI_IFS_DIR=todo-dev.
+    environment: dev
+    env:
+      IBMI_USER: ${{ secrets.IBMI_USER }}
+      IBMI_CURLIB: ${{ vars.IBMI_CURLIB }}
+      IBMI_IFS_DIR: ${{ vars.IBMI_IFS_DIR }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -38,8 +40,8 @@ jobs:
           chmod 600 ~/.ssh/ibmi_ci_key
           echo "IBMI_IDENTITY=$HOME/.ssh/ibmi_ci_key" >> "$GITHUB_ENV"
 
-      - name: Deploy to MBPRICE1 (dev library)
+      - name: Deploy to ${{ vars.IBMI_CURLIB }} (dev library)
         run: bash scripts/ibmi-deploy.sh "${{ github.sha }}"
 
-      - name: Compile in MBPRICE1 (dev library)
+      - name: Compile in ${{ vars.IBMI_CURLIB }} (dev library)
         run: bash scripts/ibmi-compile.sh

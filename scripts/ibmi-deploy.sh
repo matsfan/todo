@@ -2,27 +2,25 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Credentials — sourced from .env at the repo root (git-ignored).
-# Required variables: IBMI_USER, IBMI_IDENTITY
-# Optional variables: IBMI_SSH_PORT (default: 2222), IBMI_IFS_DIR (default: todo)
-# See .env.example for the format.
+# Usage: bash scripts/ibmi-deploy.sh [git-ref]     (git-ref defaults to main)
 #
-# IBMI_IFS_DIR lets a given profile hold more than one independent IFS
-# checkout (e.g. "todo" for the dev library, "todo-test" for an automated
-# test-library pipeline) so they don't reset/clean each other's working tree
+# Everything comes from environment variables -- normally set by the GitHub
+# Actions workflow from its GitHub Environment (dev / test / prod). See
+# docs/DEPLOY.md, "Environments".
+#   IBMI_USER, IBMI_IDENTITY   pub400 profile + SSH key   (repo secrets)
+#   IBMI_IFS_DIR               checkout under /home/<user>/source/ for this
+#                              environment                (environment variable)
+#   IBMI_SSH_PORT              optional, default 2222
+#
+# Each environment has its own checkout (todo-dev, todo-test, todo-prod) so
+# one environment's reset/clean never touches another's working tree
 # mid-build. Same profile, same IFS_ROOT parent, different leaf directory.
 # ---------------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../.env"
-if [ -f "$ENV_FILE" ]; then
-  # shellcheck source=/dev/null
-  source "$ENV_FILE"
-fi
-
-USER="${IBMI_USER:?'.env must set IBMI_USER'}"
-IDENTITY="${IBMI_IDENTITY:?'.env must set IBMI_IDENTITY'}"
+USER="${IBMI_USER:?IBMI_USER must be set}"
+IDENTITY="${IBMI_IDENTITY:?IBMI_IDENTITY must be set}"
 REF="${1:-main}"
-IFS_DIR="${IBMI_IFS_DIR:-todo}"
+IFS_DIR="${IBMI_IFS_DIR:?IBMI_IFS_DIR must be set}"
+echo "Deploy target: IFS dir ${IFS_DIR}, ref ${REF}"
 IFS_ROOT="/home/$USER/source/${IFS_DIR}"
 REPO_URL="https://github.com/matsfan/todo.git"
 PORT="${IBMI_SSH_PORT:-2222}"

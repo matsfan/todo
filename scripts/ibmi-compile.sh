@@ -2,28 +2,26 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Credentials — sourced from .env at the repo root (git-ignored).
-# Required variables: IBMI_USER, IBMI_IDENTITY, IBMI_CURLIB
-# Optional variables: IBMI_SSH_PORT (default: 2222), IBMI_IFS_DIR (default: todo)
-# See .env.example for the format.
+# Usage: bash scripts/ibmi-compile.sh [target]     (target defaults to all)
 #
-# IBMI_IFS_DIR must match whatever ibmi-deploy.sh was given for this same
-# build — it's what points the compile at the right IFS checkout when a
-# profile has more than one (e.g. a dev checkout vs. an automated
-# test-library pipeline's own checkout).
+# Everything comes from environment variables -- normally set by the GitHub
+# Actions workflow from its GitHub Environment (dev / test / prod). See
+# docs/DEPLOY.md, "Environments".
+#   IBMI_USER, IBMI_IDENTITY   pub400 profile + SSH key   (repo secrets)
+#   IBMI_CURLIB                library to build into      (environment variable)
+#   IBMI_IFS_DIR               checkout under /home/<user>/source/; must be
+#                              the one ibmi-deploy.sh populated for this same
+#                              environment                (environment variable)
+#   IBMI_SSH_PORT              optional, default 2222
+# There are no defaults for the library or checkout, so a run with a missing
+# value fails instead of building into the wrong library.
 # ---------------------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../.env"
-if [ -f "$ENV_FILE" ]; then
-  # shellcheck source=/dev/null
-  source "$ENV_FILE"
-fi
-
-USER="${IBMI_USER:?'.env must set IBMI_USER'}"
-IDENTITY="${IBMI_IDENTITY:?'.env must set IBMI_IDENTITY'}"
-CURLIB="${IBMI_CURLIB:?'.env must set IBMI_CURLIB'}"
+USER="${IBMI_USER:?IBMI_USER must be set}"
+IDENTITY="${IBMI_IDENTITY:?IBMI_IDENTITY must be set}"
+CURLIB="${IBMI_CURLIB:?IBMI_CURLIB must be set}"
 TARGET="${1:-all}"
-IFS_DIR="${IBMI_IFS_DIR:-todo}"
+IFS_DIR="${IBMI_IFS_DIR:?IBMI_IFS_DIR must be set}"
+echo "Compile target: library ${CURLIB}, IFS dir ${IFS_DIR}"
 IFS_ROOT="/home/$USER/source/${IFS_DIR}"
 PORT="${IBMI_SSH_PORT:-2222}"
 

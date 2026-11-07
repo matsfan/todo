@@ -1,7 +1,8 @@
 # Deploy Guide — IBM i RPG Todo Application
 
-This guide covers the actual deploy/compile/run workflow for this repo as of 2026-09-10:
-source lives in git, pub400 pulls it onto its own IFS, and two scripts drive everything.
+This guide covers the actual deploy/compile/run workflow for this repo as of 2026-11-03:
+source lives in git, pub400 pulls it onto its own IFS, and two scripts drive everything. The
+scripts run in GitHub Actions, one workflow per environment (dev, test, prod).
 There is no library-creation step, no source physical file, and no member upload — if you
 remember an older version of this document that had those steps, that workflow no longer
 exists and is no longer permitted (see [The two scripts are the only way in](#the-two-scripts-are-the-only-way-in)
@@ -20,8 +21,9 @@ under [docs/plans/archive/](plans/archive/) (`deploy-scripts-plan.md`,
 - A free account on [pub400.com](https://pub400.com) — sign up at the website. Each profile
   comes pre-provisioned with its own current library; you cannot create additional libraries
   on this shared free system (see [No library creation, no source members](#no-library-creation-no-source-members)).
-- An SSH key registered with your pub400.com profile. The deploy/compile scripts authenticate
-  over SSH (port 2222 by default), not Telnet — see [Configuring `.env`](#configuring-env) below.
+- An SSH key registered with your pub400.com profile, stored as the `IBMI_SSH_KEY` repo secret
+  (with your profile name as `IBMI_USER`). The deploy/compile scripts authenticate over SSH
+  (port 2222 by default), not Telnet — see [Environments](#environments) below.
 - A 5250 terminal emulator, to actually **run** the compiled application — **Mocha TN5250**
   (browser-based, free) or **ACS (IBM Access Client Solutions)** (Java, free download from
   IBM). Connect it to `pub400.com` on the standard 5250 port (23) and sign on with your
@@ -34,30 +36,57 @@ under [docs/plans/archive/](plans/archive/) (`deploy-scripts-plan.md`,
 
 ---
 
-## Configuring `.env`
+## Environments
 
-The scripts read credentials from a `.env` file at the repo root (git-ignored). Copy the
-template and fill it in:
+Every deploy and compile runs in GitHub Actions. Each environment is a **GitHub Environment**
+(repo **Settings → Environments**), and that's the only place its library and checkout are
+defined:
+
+| Environment | `IBMI_CURLIB` | `IBMI_IFS_DIR` | Workflow | Runs when | Protection |
+|---|---|---|---|---|---|
+| `dev` | `MBPRICE1` | `todo-dev` | [`deploy-dev.yml`](../.github/workflows/deploy-dev.yml) | push to any branch except `main` | — |
+| `test` | `MBPRICE2` | `todo-test` | [`deploy-test.yml`](../.github/workflows/deploy-test.yml) | push / merge to `main` | `main` only |
+| `prod` | `MBPRICEB` | `todo-prod` | [`deploy-prod.yml`](../.github/workflows/deploy-prod.yml) | manual **Run workflow** only | `main` only, reviewer approval |
+
+Each workflow job declares `environment: <name>`, which gives it that environment's variables,
+and passes them to the scripts as environment variables. To change where an environment builds,
+edit its variables under Settings → Environments; don't hard-code values in the workflow files.
+
+| Variable | Where it's set | Purpose |
+|---|---|---|
+| `IBMI_USER` | repo secret (shared) | Your pub400.com profile name. |
+| `IBMI_SSH_KEY` → `IBMI_IDENTITY` | repo secret (shared) | SSH private key for that profile; the workflow writes it to a file and sets `IBMI_IDENTITY` to its path. |
+| `IBMI_CURLIB` | environment variable | The library this environment builds into. See below for why this can't be auto-detected. |
+| `IBMI_IFS_DIR` | environment variable | Leaf directory under `/home/$IBMI_USER/source/` for this environment's checkout — see [Deploying](#deploying). |
+| `IBMI_SSH_PORT` | optional | SSH port, default `2222`. |
+
+The scripts have no defaults for the library or checkout: if either is missing, they fail
+instead of building somewhere unintended. There is no `.env` file anymore.
+
+### Deploying to production
+
+1. Merge to `main` and let **Deploy to test library** finish. Check the result in MBPRICE2.
+2. In the repo's **Actions** tab, choose **Deploy to production library** → **Run workflow**,
+   with branch `main`. Leave **sha** blank to deploy the latest `main`, or enter an earlier
+   commit to roll back to it.
+3. The run waits for approval. Open it, choose **Review deployments**, tick `prod`, and approve.
+
+Before touching pub400, the workflow checks that the commit is on `main` and that **Deploy to
+test library** succeeded for that exact commit. So production only ever gets a build that has
+already passed in test.
+
+### Running the scripts outside Actions
+
+This isn't normally needed. For one-off debugging, the scripts accept the same variables from
+your shell, for example:
 
 ```
-cp .env.example .env
+IBMI_USER=... IBMI_IDENTITY=~/.ssh/key IBMI_CURLIB=MBPRICE1 IBMI_IFS_DIR=todo-dev \
+  bash scripts/ibmi-deploy.sh my-branch
 ```
 
-[`.env.example`](../.env.example):
-
-```
-IBMI_USER=your-pub400-username
-IBMI_IDENTITY=~/.ssh/ci-key
-IBMI_CURLIB=YOURCURLIB
-```
-
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `IBMI_USER` | yes | — | Your pub400.com profile name. |
-| `IBMI_IDENTITY` | yes | — | Path to the SSH private key registered with that profile. |
-| `IBMI_CURLIB` | yes | — | The library the compile script builds into. See below for why this can't be auto-detected. |
-| `IBMI_SSH_PORT` | no | `2222` | SSH port. |
-| `IBMI_IFS_DIR` | no | `todo` | Leaf directory name under `/home/$IBMI_USER/source/` for this checkout — see [Deploying](#deploying). |
+Never do this against `test` or `prod`. Those libraries should only change through their
+workflows.
 
 **Why `IBMI_CURLIB` has to be set by hand:** a non-interactive SSH job has no reliable way to
 look up the profile's current library at build time. `DSPUSRPRF` and screen-oriented Display
@@ -104,9 +133,9 @@ from GitHub** — nothing is copied from your local working tree:
 **That IFS checkout is not scratch space.** `git clean -fdx` wipes anything untracked in it on
 every deploy — don't hand-edit files there over an SSH session expecting them to survive.
 
-`IBMI_IFS_DIR` (default `todo`) exists so a single profile can hold more than one independent
-checkout — e.g. `todo` for local/dev work and `todo-test` for the CI pipeline's own checkout —
-without one deploy's `git clean -fdx` wiping the working tree the other is mid-build against.
+Each environment has its own checkout (`IBMI_IFS_DIR`: `todo-dev`, `todo-test`, `todo-prod`)
+so one environment's `git clean -fdx` never wipes the working tree another is mid-build
+against.
 
 ---
 
@@ -163,37 +192,20 @@ non-interactive SSH session outright when run without a pty.)
 
 ---
 
-## Combined local run
-
-```
-bash .bob/hooks/ibmi-post-stop.sh
-```
-
-Deploys the currently checked-out local branch (`scripts/ibmi-deploy.sh <branch>`), then
-compiles (`scripts/ibmi-compile.sh`), appending combined output to
-[`.bob/logs/ibmi-build.log`](../.bob/logs/ibmi-build.log). This is also wired as a Bob `Stop`
-hook (`.bob/settings.json`, 120s timeout), so it fires automatically once Bob finishes an
-implementation task — you don't normally need to run it by hand unless you're checking the
-result of local, non-Bob edits.
-
----
-
 ## The three libraries and the CI pipeline
 
-One pub400 profile, three pre-provisioned libraries:
+One pub400 profile, three pre-provisioned libraries, one GitHub Environment each (see
+[Environments](#environments)):
 
 | Library | Role | How it's updated |
 |---|---|---|
-| `MBPRICE1` | dev | Local/interactive work, and Bob's post-stop hook, via `.env`'s `IBMI_CURLIB`. |
-| `MBPRICE2` | test | **Automatically**, on every push to `main`, by [`.github/workflows/deploy-test.yml`](../.github/workflows/deploy-test.yml) (also has `workflow_dispatch` for an on-demand retry). Live and green as of 2026-09-10 — 10+ successful runs, including both push-triggered and manually dispatched runs. |
-| `MBPRICEB` | production | Manual, by separate instruction. Not automated. |
+| `MBPRICE1` | dev | **Automatically**, on every push to any branch except `main`, by `deploy-dev.yml`. |
+| `MBPRICE2` | test | **Automatically**, on every push to `main`, by `deploy-test.yml`. |
+| `MBPRICEB` | production | **Manually**, with reviewer approval, by `deploy-prod.yml` — see [Deploying to production](#deploying-to-production). |
 
-**Never deploy or compile into `MBPRICE2` by hand.** A manual run would use the shared dev IFS
-checkout (`IBMI_IFS_DIR=todo`) rather than CI's own (`IBMI_IFS_DIR=todo-test`), and could
-diverge from what CI last put there. The CI workflow runs `scripts/ibmi-deploy.sh
-"${{ github.sha }}"` then `scripts/ibmi-compile.sh` with `IBMI_CURLIB=MBPRICE2` and
-`IBMI_IFS_DIR=todo-test` — the same two scripts covered above, just invoked with different
-`.env`-equivalent values from GitHub Actions secrets/env, not a separate deploy mechanism.
+Dev and test also have `workflow_dispatch`, for an on-demand retry. All three workflows run the
+same two scripts covered above; only the GitHub Environment differs. Bob's `Stop` hook
+(`.bob/hooks/ibmi-post-stop.sh`) used to build dev locally and is now a no-op.
 
 ---
 
@@ -282,17 +294,13 @@ Sub-Task 3 for status. Don't treat the `RUCALLTST` command above as something yo
 
 Beyond the 5250 commands above:
 
-- **Local build log** — every run of `scripts/ibmi-deploy.sh`/`scripts/ibmi-compile.sh` via
-  the combined hook appends to [`.bob/logs/ibmi-build.log`](../.bob/logs/ibmi-build.log);
-  check there first for what a recent build actually did or failed on.
 - **Compile diagnostics** — `makei build` runs with `OPT=*EVENTF`, so each compiled object
   gets an `.evfevent` file alongside its source on the IFS checkout with the real `CPF`/`RNF`
   message IDs and line numbers. It's fine to open a **read-only** SSH session to read one of
   these after a script run (see [The two scripts are the only way in](#the-two-scripts-are-the-only-way-in));
   just don't use that session to run compile commands directly.
-- **GitHub Actions** — for `MBPRICE2` (test) build failures, check the
-  [`Deploy to test library`](../.github/workflows/deploy-test.yml) workflow run in the repo's
-  Actions tab rather than SSHing in by hand.
+- **GitHub Actions** — for any build failure, check that environment's workflow run (**Deploy
+  to dev/test/production library**) in the repo's Actions tab rather than SSHing in by hand.
 
 ---
 

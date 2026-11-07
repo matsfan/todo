@@ -17,10 +17,9 @@ QBNDSRC/            ← Binder source (TOBi requires this to build a *SRVPGM; se
 scripts/            ← ibmi-deploy.sh / ibmi-compile.sh — the only permitted way to touch pub400
 .github/workflows/  ← deploy-dev.yml: deploys + compiles MBPRICE1 on push to any branch except main
                       deploy-test.yml: deploys + compiles MBPRICE2 on every push to main
+                      deploy-prod.yml: deploys + compiles MBPRICEB, manual + approval only
 .bob/               ← Bob's rule files (rules-agent/, rules-plan/, rules-ask/), the Stop hook
                       (hooks/ibmi-post-stop.sh) and its build log (logs/ibmi-build.log)
-.env / .env.example ← deploy/compile credentials for local manual use (IBMI_USER, IBMI_IDENTITY,
-                      IBMI_CURLIB, IBMI_IFS_DIR); .env is git-ignored, .env.example is the template
 docs/               ← Human-readable docs only (not uploaded to IBM i)
 iproj.json          ← TOBi project config (target library, build command)
 Rules.mk            ← TOBi build rules (root + one per source directory)
@@ -39,8 +38,9 @@ restricted on pub400.com — each profile is pre-provisioned with its own curren
 `MBPRICE1` is updated automatically on every push to any branch except `main` by
 `.github/workflows/deploy-dev.yml` (IFS directory: `todo-dev`). `MBPRICE2` is updated automatically
 on every push to `main` by `.github/workflows/deploy-test.yml` (IFS directory: `todo-test`) —
-never deploy or compile into either by hand. `MBPRICEB` is updated manually, by separate
-instruction only.
+never deploy or compile into either by hand. `MBPRICEB` is updated only by
+`.github/workflows/deploy-prod.yml` (IFS directory: `todo-prod`), started by hand from the Actions
+tab on the user's explicit instruction; see [Environments](#environments) below.
 
 **Qualifying `CALL` alone does not select which library's data you hit.** Files in `TODOBL`
 are declared unqualified and resolve at `OPEN` time via the job's current-library slot, independent
@@ -86,9 +86,26 @@ Deploy and compile are handled entirely by GitHub Actions CI — the Bob Stop ho
 |---|---|---|---|
 | any branch except `main` | `deploy-dev.yml` | `todo-dev` | `MBPRICE1` |
 | `main` | `deploy-test.yml` | `todo-test` | `MBPRICE2` |
+| manual "Run workflow" on `main` | `deploy-prod.yml` | `todo-prod` | `MBPRICEB` |
 
 To trigger a build: push your branch. The relevant workflow will deploy the commit to pub400
 and run `scripts/ibmi-compile.sh` automatically. Build output appears in the Actions run log.
+
+### Environments
+
+Each library is defined in exactly one place: a **GitHub Environment** (repo Settings →
+Environments) named `dev`, `test` or `prod`, holding the variables `IBMI_CURLIB` and
+`IBMI_IFS_DIR`. Each workflow job declares `environment: <name>` and passes those values to the
+scripts. `IBMI_USER` and `IBMI_SSH_KEY` are repo-level secrets shared by all three. The scripts
+read only environment variables, with no defaults for library or checkout, and there is no
+`.env` file. To change where an environment builds, edit its variables in GitHub, not the
+workflow files.
+
+- `test` and `prod` only accept the `main` branch.
+- `prod` requires reviewer approval before the job starts. `deploy-prod.yml` also refuses any
+  commit that isn't on `main` or that hasn't had a successful `deploy-test.yml` run.
+- `workflow_dispatch` only works for workflow files already on the default branch, so a new or
+  changed `deploy-prod.yml` can't be run until it's merged.
 
 ## Architecture
 
